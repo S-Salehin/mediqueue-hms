@@ -1,0 +1,58 @@
+# Supplied academic source material and interface references
+/Defense_Phase 1 (0242220005101064).pdf
+/HMS Title_Phase_Evaluation_Report (1064 & 1051).pdf
+/Proposal Approval Form (1).pdf
+/WhatsApp Image 2026-08-10 at 2.13.04 AM.jpeg
+/WhatsApp Image 2026-08-10 at 2.13.04 AM (1).jpeg
+/WhatsApp Image 2026-08-10 at 2.13.04 AM (2).jpeg
+/WhatsApp Image 2026-08-10 at 2.13.04 AM (3).jpeg
+
+# Local secrets and credentials
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+/secrets/
+
+# Python environments, caches, tests, and builds
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# JavaScript dependencies, caches, tests, and builds
+node_modules/
+.npm/
+.vite/
+.eslintcache
+coverage/
+playwright-report/
+test-results/
+
+# Runtime state, logs, databases, backups, and generated media
+*.log
+*.pid
+*.sqlite3
+/media/
+/staticfiles/
+/backups/
+/postgres-data/
+
+# Local editor and operating system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
