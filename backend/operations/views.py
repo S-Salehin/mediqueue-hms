@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime, time, timedelta
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from rest_framework import viewsets
@@ -13,6 +13,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.exceptions import Conflict
 from core.pagination import BoundedPagination
 from core.permissions import IsAdministrator, IsAuthenticatedWithStaffMFA, IsOperationalStaff, IsReceptionOrAdmin, active_roles
 from core.services import audit, idempotent, safe_model_projection
@@ -117,10 +118,25 @@ class ScheduleAdminViewSet(viewsets.ModelViewSet):
                 status=400,
             )
         scope = f"configuration.{self.get_serializer_class().__name__}.{instance.pk}.update"
+
+        def operation():
+            locked = self.filter_queryset(self.get_queryset()).select_for_update().get(pk=instance.pk)
+            self.check_object_permissions(request, locked)
+            serializer = self.get_serializer(
+                locked,
+                data=request.data,
+                partial=kwargs.get("partial", False),
+            )
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            if getattr(locked, "_prefetched_objects_cache", None):
+                locked._prefetched_objects_cache = {}
+            return Response(serializer.data)
+
         return idempotent(
             request,
             scope,
-            lambda: viewsets.ModelViewSet.update(self, request, *args, **kwargs),
+            operation,
         )
 
     def perform_create(self, serializer):
@@ -128,6 +144,49 @@ class ScheduleAdminViewSet(viewsets.ModelViewSet):
         audit(self.request, "schedule.created", schedule, "create", serializer.validated_data)
 
     def perform_update(self, serializer):
+        if isinstance(serializer.instance, Schedule):
+            structural_fields = (
+                "hospital",
+                "doctor",
+                "location",
+                "chamber",
+                "weekday",
+                "start_local",
+                "end_local",
+                "slot_duration_minutes",
+                "effective_from",
+                "effective_to",
+            )
+            structural_changes = [
+                field
+                for field in structural_fields
+                if field in serializer.validated_data
+                and serializer.validated_data[field] != getattr(serializer.instance, field)
+            ]
+            if structural_changes and serializer.instance.appointments.exists():
+                raise Conflict(
+                    "This schedule has appointments. Deactivate it and create a replacement schedule.",
+                    code="schedule_has_appointments",
+                )
+            requested_capacity = serializer.validated_data.get("capacity_per_slot")
+            if requested_capacity is not None and requested_capacity < serializer.instance.capacity_per_slot:
+                peak_confirmed = (
+                    Appointment.objects.filter(
+                        schedule=serializer.instance,
+                        status=Appointment.Status.CONFIRMED,
+                    )
+                    .values("start_at")
+                    .annotate(total=Count("id"))
+                    .order_by("-total")
+                    .values_list("total", flat=True)
+                    .first()
+                    or 0
+                )
+                if requested_capacity < peak_confirmed:
+                    raise Conflict(
+                        "Capacity cannot be lower than the confirmed bookings in an existing slot.",
+                        code="capacity_below_confirmed",
+                    )
         before = self.audit_projection(serializer.instance)
         schedule = serializer.save()
         audit(

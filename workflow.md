@@ -107,6 +107,7 @@ If the message is lost or the link expires, the patient requests another message
 2. The API rejects invalid time ranges, nonpositive duration or capacity, and overlaps for the same doctor or chamber.
 3. The system stores the schedule and audit event in one transaction.
 4. Availability is calculated from the active schedule only after the transaction commits.
+5. After any appointment references the schedule, its doctor, location, chamber, weekday, time, duration, and effective dates are fixed. A structural change deactivates the old schedule and creates a replacement. Capacity may increase, but it cannot be reduced below confirmed bookings in an existing slot.
 
 ### 6.3 Close or override a schedule
 

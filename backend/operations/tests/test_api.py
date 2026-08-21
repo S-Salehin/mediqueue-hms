@@ -705,6 +705,69 @@ class APIContractTests(HospitalTestCase):
         self.assertEqual(schedule_event.changes["before"]["capacity_per_slot"], 1)
         self.assertEqual(schedule_event.changes["after"]["capacity_per_slot"], 2)
 
+    def test_schedule_update_preserves_existing_appointment_identity_and_capacity(self):
+        appointment = book_appointment(
+            self.request_for(self.patient_user),
+            self.patient.pk,
+            self.schedule.pk,
+            self.department.pk,
+            self.start_at,
+        )
+        self.authenticate(self.admin_user)
+
+        structural_change = self.client.patch(
+            f"/api/v1/admin/schedules/{self.schedule.pk}/",
+            {"start_local": "08:30:00"},
+            format="json",
+            **self.idempotency(),
+        )
+        self.assertEqual(structural_change.status_code, 409)
+        self.assertEqual(structural_change.json()["code"], "schedule_has_appointments")
+        self.schedule.refresh_from_db()
+        appointment.refresh_from_db()
+        self.assertEqual(self.schedule.start_local.isoformat(), "09:00:00")
+        self.assertEqual(appointment.start_at, self.start_at)
+        self.assertEqual(appointment.doctor_id, self.doctor.pk)
+        self.assertEqual(appointment.chamber_id, self.chamber.pk)
+
+        capacity_increase = self.client.patch(
+            f"/api/v1/admin/schedules/{self.schedule.pk}/",
+            {"capacity_per_slot": 2},
+            format="json",
+            **self.idempotency(),
+        )
+        self.assertEqual(capacity_increase.status_code, 200)
+
+        second_user = self.create_user("schedule-integrity@example.test", "patient")
+        second_patient = PatientProfile.objects.create(
+            hospital=self.hospital,
+            user=second_user,
+            full_name="Schedule Integrity Patient",
+            email=second_user.email,
+            phone="+8801800000088",
+            date_of_birth=timezone.localdate().replace(year=1992),
+            address="Synthetic address",
+            is_claimed=True,
+        )
+        book_appointment(
+            self.request_for(second_user),
+            second_patient.pk,
+            self.schedule.pk,
+            self.department.pk,
+            self.start_at,
+        )
+
+        capacity_reduction = self.client.patch(
+            f"/api/v1/admin/schedules/{self.schedule.pk}/",
+            {"capacity_per_slot": 1},
+            format="json",
+            **self.idempotency(),
+        )
+        self.assertEqual(capacity_reduction.status_code, 409)
+        self.assertEqual(capacity_reduction.json()["code"], "capacity_below_confirmed")
+        self.schedule.refresh_from_db()
+        self.assertEqual(self.schedule.capacity_per_slot, 2)
+
     def test_bounded_lists_expose_second_pages(self):
         for index in range(3):
             Notification.objects.create(

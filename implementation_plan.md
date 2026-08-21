@@ -109,6 +109,7 @@ Modules communicate through explicit service functions. Views and serializers do
 3. Overlapping active schedules for the same doctor or chamber are rejected for the same effective period.
 4. Availability is computed from the schedule and exception, then reduced by active confirmed appointment capacity inside a transaction when a booking is made.
 5. Slots are returned as UTC start and end timestamps with an Asia/Dhaka display value. Past slots and closed periods are never bookable.
+6. A schedule row is locked for booking and administration changes. Once an appointment references it, structural fields are immutable. A changed doctor, chamber, location, weekday, time, duration, or effective period requires a deactivated old schedule and a new schedule. Capacity cannot be reduced below the largest confirmed booking count for an existing slot.
 
 ### 5.6 Appointments
 
