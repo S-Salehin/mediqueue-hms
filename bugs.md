@@ -121,6 +121,7 @@ No implementation defect existed at the audit baseline because no runnable appli
 | CODE-001 Refund correction lacked a reference requirement | S1 High | Local API and service tests, working candidate | Every refund or payment correction must carry a bounded receipt or correction reference. The service previously permitted an empty reference. | Backend owner | Closed 22 August 2026 | Payment legal transition and least privilege API tests |
 | OPS-001 Web runtime image exited without serving | S1 High | Disposable Compose test stack, working candidate | The runtime image must start Caddy. The final image inherited no command and exited with status zero. | Operations owner | Closed 22 August 2026 | Same origin Compose health and five Chromium workflows |
 | OPS-002 Container coverage file used application directory | S2 Medium | Disposable backend test container, working candidate | Coverage evidence must write to a bounded temporary path. The first run passed all tests but could not save `/app/.coverage`. | Operations owner | Closed 22 August 2026 | Read only backend test container completed 112 tests and the 85 percent gate |
+| OPS-003 CI used a removed coverage XML option | S2 Medium | GitHub Actions run 32522373133, commit `7dca466` | A green 112 test run must publish its XML evidence. Coverage 7.15 rejected the older `--output` spelling after the tests and threshold had passed. | Operations owner | Closed 22 August 2026 | Backend workflow uses the supported `coverage xml -o` command |
 
 ## 8. Triage and correction process
 
