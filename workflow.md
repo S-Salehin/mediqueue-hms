@@ -38,6 +38,8 @@ All examples use synthetic data until the real data launch gates are approved.
 4. Reusing an accepted or expired token shows a safe recovery path and does not expose internal token state.
 5. The patient signs in and sees only their own profile, appointments, queue token, notifications, consent, and payment summaries.
 
+If the message is lost or the link expires, the patient requests another message from the resend page. The response is identical whether or not an account exists. For an existing unverified account, the transaction invalidates every earlier unused verification token and queued verification message before creating the replacement. A delivered old link cannot become valid again.
+
 ### 3.3 Failed or abandoned registration
 
 1. Invalid fields return an accessible error summary and field messages without discarding safe input.
@@ -105,6 +107,7 @@ All examples use synthetic data until the real data launch gates are approved.
 2. The API rejects invalid time ranges, nonpositive duration or capacity, and overlaps for the same doctor or chamber.
 3. The system stores the schedule and audit event in one transaction.
 4. Availability is calculated from the active schedule only after the transaction commits.
+5. After any appointment references the schedule, its doctor, location, chamber, weekday, time, duration, and effective dates are fixed. A structural change deactivates the old schedule and creates a replacement. Capacity may increase, but it cannot be reduced below confirmed bookings in an existing slot.
 
 ### 6.3 Close or override a schedule
 
@@ -304,13 +307,14 @@ All examples use synthetic data until the real data launch gates are approved.
 ## 12. Notification workflow
 
 1. The business service creates an in app notification and email outbox job in the same transaction as the appointment, queue, security, or consent event.
-2. The worker claims eligible outbox rows with a PostgreSQL row lock and a bounded lease.
-3. The worker renders only an approved versioned template and sends through production SMTP.
-4. Success records delivery time and safe provider reference.
-5. A temporary failure records a safe error category and schedules a bounded exponential retry with jitter.
-6. A permanent or exhausted failure becomes terminal, appears in administrator operations, and raises an alert.
-7. An authorized manual retry creates an audited attempt and cannot alter the original business event.
-8. Email contains minimal operational content and a secure link. It does not contain symptoms, specialty, another patient’s data, credentials, or detailed audit content.
+2. Before sending an account verification, reset, claim, or staff invitation message, the worker confirms that its single use token is still active. Expired, consumed, or superseded links are discarded and their sensitive template data are cleared.
+3. The worker claims eligible outbox rows with a PostgreSQL row lock and a bounded lease.
+4. The worker renders only an approved versioned template and sends through production SMTP.
+5. Success records delivery time and safe provider reference.
+6. A temporary failure records a safe error category and schedules a bounded exponential retry with jitter.
+7. A permanent or exhausted failure becomes terminal, appears in administrator operations, and raises an alert.
+8. An authorized manual retry creates an audited attempt and cannot alter the original business event.
+9. Email contains minimal operational content and a secure link. It does not contain symptoms, specialty, another patient’s data, credentials, or detailed audit content.
 
 ## 13. Correction and deactivation workflow
 

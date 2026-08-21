@@ -82,7 +82,7 @@ Tests use user level interactions such as typing, tabbing, clicking, and submitt
 
 ### 5.4 Browser workflow tests
 
-Playwright tests exercise the complete system through HTTPS compatible staging routes. The release suite covers the latest two stable desktop versions of Chrome, Edge, and Firefox, plus the current supported mobile Safari and Chrome viewport behaviour. A reduced smoke set runs after production deployment with synthetic release records.
+Playwright tests exercise the built frontend and real Django API through the same origin disposable stack. The automated release suite uses the exact pinned Playwright Chromium version and covers the public service, patient availability, staff MFA, receptionist check in, the patient queue projection, and the assigned doctor queue. Current Firefox, WebKit, Edge, Android Chrome, and mobile Safari checks remain a staging sign off gate before real patient data is allowed. A reduced Chromium smoke set runs after deployment with synthetic release records.
 
 ## 6. Identity and session tests
 
@@ -390,13 +390,19 @@ Production penetration testing, if commissioned, requires a written scope, test 
 
 Load tests run on staging sized like production with production debug settings disabled. Monitoring confirms whether response time comes from the API, database, worker, or host. Test data is reset through an approved staging procedure after the run.
 
-### 22.1 Expected load profile
+### 22.1 Quick local read gate
+
+The Compose `load-test` service is a short feedback check, not the release workload. It ramps to 50 virtual users, holds for 60 seconds, and tests the application shell, health endpoints, public directory reads, and an optional authenticated queue snapshot. Its only performance threshold is read p95 below 500 milliseconds. It also rejects an unapproved production target, an unapproved remote staging target, and incomplete queue credentials.
+
+A passing quick gate proves that the assembled local proxy and read paths remain responsive under that narrow workload. It does not measure write latency, booking or queue integrity, notification recovery, sustained host behaviour, or production capacity. Its result must never be reported as the full load release gate.
+
+### 22.2 Required staging workload
 
 The dataset contains 30 doctors, 500 appointments for the busy day, at least 10,000 historical completed visits for estimate queries, and representative audit and notification history.
 
 The test ramps from 1 to 50 concurrent users over five minutes, maintains 50 for 30 minutes, and ramps down over five minutes. The traffic mix includes public directory and availability reads, patient dashboard reads, queue snapshots with conditional requests, patient booking actions, receptionist search and check in, doctor queue actions, and administrator reads. Write workflows use independent records so expected conflicts are distinguishable from failures.
 
-### 22.2 Pass conditions
+### 22.3 Staging pass conditions
 
 1. The 95th percentile is below 500 milliseconds for read requests.
 2. The 95th percentile is below 800 milliseconds for write requests.
@@ -525,3 +531,20 @@ The production candidate is accepted only when all of these statements are true.
 12. Every real data gate in `production.md` is approved before any patient information is entered.
 
 The release owner records the exact Git commit, container digest, database migration state, test evidence, approved exceptions, signatories, and acceptance time. Any later code, configuration, dependency, migration, or infrastructure change creates a new release candidate and requires proportionate retesting.
+
+## 30. Current platform verification
+
+The following checks ran on 22 August 2026 with Docker Engine 29.7.2 and Docker Compose 5.3.1. They describe the current working candidate. Continuous integration must repeat them against the final commit before they become release evidence.
+
+1. Local, test, staging, and production Compose configuration rendered successfully. The development, test, and production Caddy policies passed `caddy validate` with their intended host settings.
+2. The PostgreSQL image built from the official pgBackRest 2.59.0 distribution archive. The archive matched SHA256 `faaf8faa14a6392279654ee216a493fcd07b0c513af4b55fe34faec062cb8875`, and the built image returned `pgBackRest 2.59.0`.
+3. The assembled test topology returned HTTP 200 for liveness, readiness, and the application shell through one same origin Caddy endpoint. The database and API published no host ports. The web service could not resolve the private database service, the database could not resolve the web service, and the API alone joined both required networks.
+4. The API and notification worker ran as uid 10001. Caddy ran as uid 10002. Each used a read only root filesystem, had no effective Linux capabilities, and could write only to its approved temporary or persistent paths. The runtime database role had no database or schema creation permission.
+5. The backend suite passed 113 tests against PostgreSQL 18.6 on Python 3.14.7 with 87 percent measured coverage. It includes direct authorization, state transition, idempotency, append only history, booked schedule integrity, last capacity, first MRN, and simultaneous queue call tests.
+6. The frontend suite passed 55 tests with 86.87 percent statement coverage and 88.88 percent line coverage. Formatting, linting, and the Vite production build passed. The built JavaScript was 432.13 kB and 121.12 kB compressed.
+7. Five serial Chromium workflows passed against the assembled same origin stack. They covered the public privacy notice, patient availability, receptionist MFA and check in, patient queue privacy and location guidance, and doctor MFA with the assigned operational queue.
+8. The quick read gate ramped to 50 virtual users, held at 50 for 30 seconds, completed 1,892 requests with no failed check, and measured read p95 at 4.83 milliseconds on the local Docker host. This is only the narrow gate defined in section 22.1. It does not prove write latency, queue freshness, or production capacity.
+9. The isolated recovery exercise created an encrypted full backup, verified the repository, cleared only its named synthetic database volume, restored into that clean volume, and recovered the expected marker. It also proved uid 70, zero effective capabilities, a read only root filesystem, and separated database roles. This proves the local container and encryption mechanics. It does not prove the one hour recovery point objective or four hour recovery time objective on approved off host storage.
+10. Caddy, shell scripts, and GitHub Actions configuration passed their validators. Strict Trivy scans found zero high or critical findings in the API, web, and PostgreSQL images. The repository scan found zero high or critical dependency vulnerabilities, Dockerfile misconfigurations, or secrets. `pip-audit` found no known Python dependency vulnerability, Bandit found no medium or high application source issue, and Semgrep ran 151 Python and Django rules on 91 files with zero findings.
+
+The remaining platform release gates require the final committed images and external staging infrastructure. They include the 30 minute authenticated mixed read and write workload, synthetic business integrity reconciliation after that workload, external TLS and certificate monitoring, production SMTP failure handling, restoration from separate approved storage, alert delivery, a schema compatible rollback rehearsal with recorded image digests, and hospital acceptance. None of these items is represented as passed by the local evidence above.

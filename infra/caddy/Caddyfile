@@ -1,0 +1,67 @@
+{
+	admin off
+	email {$ACME_EMAIL}
+	http_port 8080
+	https_port 8443
+}
+
+:8090 {
+	log off
+	respond /healthz 200
+	respond 404
+}
+
+{$PUBLIC_HOSTNAME} {
+	encode zstd gzip
+
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp \?.*$ ""
+				request>remote_ip ip_mask 24 48
+				request>client_ip ip_mask 24 48
+				request>headers>Authorization delete
+				request>headers>Cookie delete
+				request>headers>Set-Cookie delete
+			}
+		}
+	}
+
+	header {
+		-Server
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data: blob:; object-src 'none'; script-src 'self'; style-src 'self'"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+		Referrer-Policy "no-referrer"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+	}
+
+	route {
+		@api path /api /api/*
+		header @api Cache-Control "no-store"
+
+		@backend path /api /api/* /static /static/*
+		reverse_proxy @backend api:8000 {
+			health_uri /api/v1/health/ready/
+			health_interval 15s
+			health_timeout 4s
+			health_headers {
+				Host {$PUBLIC_HOSTNAME}
+				X-Forwarded-Proto https
+			}
+		}
+
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+
+		root * /srv
+		try_files {path} /index.html
+		header /index.html Cache-Control "no-store"
+		file_server
+	}
+}

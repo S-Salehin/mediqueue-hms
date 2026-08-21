@@ -1,0 +1,361 @@
+name: ${COMPOSE_PROJECT_NAME:-mediqueue-test}
+
+x-app-environment: &app-environment
+  APP_VERSION: ${APP_VERSION:-test}
+  DATABASE_URL: ${DATABASE_URL:-postgresql://mediqueue_test_runtime:test-only-runtime-database-password@db:5432/mediqueue_test}
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-test-only-django-secret-key-that-is-longer-than-fifty-characters-2026}
+  MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:-test-only-separate-mfa-encryption-key-2026}
+  DJANGO_DEBUG: "false"
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,api}
+  DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:8081}
+  DJANGO_SECURE_COOKIES: "false"
+  DJANGO_SECURE_SSL_REDIRECT: "false"
+  ALLOW_INSECURE_TEST_SETTINGS: "true"
+  DJANGO_BEHIND_PROXY: "true"
+  HOSPITAL_TIME_ZONE: Asia/Dhaka
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8081}
+  LOG_LEVEL: ${LOG_LEVEL:-WARNING}
+  DEFAULT_FROM_EMAIL: MediQueue Test <no-reply@example.test>
+  EMAIL_BACKEND: django.core.mail.backends.locmem.EmailBackend
+  OUTBOX_POLL_SECONDS: "1"
+  SMTP_TIMEOUT_SECONDS: ${SMTP_TIMEOUT_SECONDS:-10}
+  SESSION_IDLE_TIMEOUT_SECONDS: "1800"
+  SESSION_ABSOLUTE_TIMEOUT_SECONDS: "28800"
+
+x-service-defaults: &service-defaults
+  init: true
+  restart: "no"
+  logging:
+    driver: json-file
+    options:
+      max-file: "2"
+      max-size: 10m
+
+services:
+  db:
+    <<: *service-defaults
+    image: postgres:18.6-alpine3.23@sha256:f65cfc1a73466fc0807f4a33496e1c438b19269091c8f998faec871874df8e5e
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mediqueue_test}
+      POSTGRES_USER: ${POSTGRES_USER:-mediqueue_test_bootstrap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-test-only-database-password}
+      MEDIQUEUE_MIGRATION_USER: ${MEDIQUEUE_MIGRATION_USER:-mediqueue_test_owner}
+      MEDIQUEUE_MIGRATION_PASSWORD: ${MEDIQUEUE_MIGRATION_PASSWORD:-test-only-owner-database-password}
+      MEDIQUEUE_APP_USER: ${MEDIQUEUE_APP_USER:-mediqueue_test_runtime}
+      MEDIQUEUE_APP_PASSWORD: ${MEDIQUEUE_APP_PASSWORD:-test-only-runtime-database-password}
+    tmpfs:
+      - /var/lib/postgresql
+    volumes:
+      - ./infra/postgres/init/10-create-application-role.sh:/docker-entrypoint-initdb.d/10-create-application-role.sh:ro
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username=$${POSTGRES_USER} --dbname=$${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  api:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: infra/docker/backend.Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-test}
+    environment:
+      <<: *app-environment
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:-postgresql://mediqueue_test_owner:test-only-owner-database-password@db:5432/mediqueue_test}
+    command:
+      - sh
+      - -c
+      - DATABASE_URL="$${MIGRATION_DATABASE_URL}" python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 2 --timeout 60 --error-logfile -
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1770,uid=10001,gid=10001
+    networks:
+      - data
+      - service
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,urllib.request; h=os.environ['DJANGO_ALLOWED_HOSTS'].split(',')[0]; r=urllib.request.Request('http://127.0.0.1:8000/api/v1/health/ready/',headers={'Host':h}); urllib.request.urlopen(r,timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 15s
+
+  worker:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: infra/docker/backend.Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-test}
+    environment: *app-environment
+    command: ["python", "manage.py", "process_outbox", "--loop"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=32m,mode=1770,uid=10001,gid=10001
+    networks:
+      - data
+      - service
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 4
+
+  web:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: infra/docker/frontend.Dockerfile
+      target: runtime
+      args:
+        APP_VERSION: ${APP_VERSION:-test}
+    environment:
+      PUBLIC_HOSTNAME: :80
+      ACME_EMAIL: operations@example.test
+    ports:
+      - 127.0.0.1:${WEB_PORT:-8081}:8080
+    volumes:
+      - ./infra/caddy/Caddyfile.test:/etc/caddy/Caddyfile:ro
+    read_only: true
+    user: 10002:10002
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /config:size=4m,mode=0700,uid=10002,gid=10002
+      - /data:size=4m,mode=0700,uid=10002,gid=10002
+      - /tmp:size=8m,mode=1770,uid=10002,gid=10002
+    networks:
+      - service
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:8090/healthz || exit 1"]
+      interval: 8s
+      timeout: 4s
+      retries: 8
+      start_period: 10s
+
+  backend-tests:
+    <<: *service-defaults
+    profiles: [tests]
+    build:
+      context: .
+      dockerfile: infra/docker/backend.Dockerfile
+      target: test
+      args:
+        APP_VERSION: ${APP_VERSION:-test}
+    environment:
+      <<: *app-environment
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mediqueue_test_bootstrap}:${POSTGRES_PASSWORD:-test-only-database-password}@db:5432/${POSTGRES_DB:-mediqueue_test}
+      COVERAGE_FILE: /tmp/.coverage
+    command:
+      - sh
+      - -c
+      - coverage run manage.py test --verbosity 2 && coverage report --show-missing --fail-under=85
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=32m,mode=1770,uid=10001,gid=10001
+    networks:
+      - data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend-tests:
+    <<: *service-defaults
+    profiles: [tests]
+    build:
+      context: .
+      dockerfile: infra/docker/frontend.Dockerfile
+      target: test
+    command: ["npm", "run", "test:coverage"]
+
+  load-test:
+    profiles: [performance]
+    image: grafana/k6:2.2.0@sha256:9bd01d6941fca969cb61bb57d2da5ee9b385fe2aa8881df3798c196564d6ace6
+    restart: "no"
+    read_only: true
+    user: 12345:12345
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      BASE_URL: http://web:8080
+      TARGET_ENV: test
+      QUEUE_ID: ${QUEUE_ID:-}
+      DJANGO_SESSION_COOKIE: ${DJANGO_SESSION_COOKIE:-}
+      RAMP_DURATION: ${RAMP_DURATION:-15s}
+      HOLD_DURATION: ${HOLD_DURATION:-60s}
+      RAMP_DOWN_DURATION: ${RAMP_DOWN_DURATION:-10s}
+    command: ["run", "/scripts/pilot-load.js"]
+    volumes:
+      - ./scripts/performance:/scripts:ro
+    tmpfs:
+      - /tmp:size=16m,mode=1770,uid=12345,gid=12345
+    networks:
+      - service
+    depends_on:
+      web:
+        condition: service_healthy
+
+  recovery-db:
+    profiles: [recovery]
+    build:
+      context: .
+      dockerfile: infra/docker/postgres.Dockerfile
+      args:
+        APP_VERSION: recovery-test
+    user: 70:70
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    environment:
+      POSTGRES_DB: mediqueue_recovery_test
+      POSTGRES_USER: mediqueue_recovery_bootstrap
+      POSTGRES_PASSWORD: recovery-test-bootstrap-password
+      MEDIQUEUE_MIGRATION_USER: mediqueue_recovery_owner
+      MEDIQUEUE_MIGRATION_PASSWORD: recovery-test-owner-password
+      MEDIQUEUE_APP_USER: mediqueue_recovery_runtime
+      MEDIQUEUE_APP_PASSWORD: recovery-test-runtime-password
+      PGBACKREST_REPO1_CIPHER_PASS: recovery-test-only-backup-encryption-passphrase
+      PGBACKREST_REPO1_RETENTION_FULL: "30"
+      PGBACKREST_PG1_USER: mediqueue_recovery_bootstrap
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=pgbackrest --stanza=mediqueue archive-push %p
+      - -c
+      - archive_timeout=30
+    volumes:
+      - recovery_postgres_data:/var/lib/postgresql
+      - recovery_socket:/var/run/postgresql
+      - recovery_spool:/var/spool/pgbackrest
+      - recovery_repository:/var/lib/pgbackrest
+    tmpfs:
+      - /tmp:size=16m,mode=1770,uid=70,gid=70
+      - /var/log/pgbackrest:size=16m,mode=0750,uid=70,gid=70
+    networks:
+      - recovery_data
+    depends_on:
+      recovery-storage-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username=$${POSTGRES_USER} --dbname=$${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  recovery-backup:
+    profiles: [recovery]
+    build:
+      context: .
+      dockerfile: infra/docker/postgres.Dockerfile
+      args:
+        APP_VERSION: recovery-test
+    user: postgres
+    cap_drop: [ALL]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        set -eu;
+        until pg_isready --host=/var/run/postgresql --username=mediqueue_recovery_bootstrap --dbname=mediqueue_recovery_test; do sleep 2; done;
+        pgbackrest --stanza=mediqueue stanza-create;
+        pgbackrest --stanza=mediqueue check;
+        touch /tmp/backup-ready;
+        exec sleep infinity
+    environment:
+      PGBACKREST_REPO1_CIPHER_PASS: recovery-test-only-backup-encryption-passphrase
+      PGBACKREST_REPO1_RETENTION_FULL: "30"
+      PGBACKREST_PG1_USER: mediqueue_recovery_bootstrap
+    volumes:
+      - type: volume
+        source: recovery_postgres_data
+        target: /var/lib/postgresql
+        read_only: true
+      - recovery_socket:/var/run/postgresql
+      - recovery_spool:/var/spool/pgbackrest
+      - recovery_repository:/var/lib/pgbackrest
+    tmpfs:
+      - /tmp:size=16m,mode=1770,uid=70,gid=70
+    read_only: true
+    networks:
+      - recovery_data
+    depends_on:
+      recovery-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/backup-ready && pgbackrest --stanza=mediqueue --output=json info >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  recovery-storage-init:
+    profiles: [recovery]
+    build:
+      context: .
+      dockerfile: infra/docker/postgres.Dockerfile
+      args:
+        APP_VERSION: recovery-test
+    restart: "no"
+    init: true
+    user: 0:0
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        set -eu;
+        mkdir -p /var/lib/postgresql/18/docker /var/run/postgresql /var/spool/pgbackrest /var/lib/pgbackrest;
+        chown 70:70 /var/lib/postgresql /var/lib/postgresql/18 /var/lib/postgresql/18/docker /var/run/postgresql /var/spool/pgbackrest /var/lib/pgbackrest;
+        chmod 0700 /var/lib/postgresql/18/docker;
+        chmod 03775 /var/run/postgresql;
+        chmod 0750 /var/spool/pgbackrest /var/lib/pgbackrest
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    security_opt:
+      - no-new-privileges:true
+    network_mode: none
+    volumes:
+      - recovery_postgres_data:/var/lib/postgresql
+      - recovery_socket:/var/run/postgresql
+      - recovery_spool:/var/spool/pgbackrest
+      - recovery_repository:/var/lib/pgbackrest
+    tmpfs:
+      - /tmp:size=4m,mode=1770
+
+networks:
+  data:
+    internal: true
+  service:
+  recovery_data:
+    internal: true
+
+volumes:
+  recovery_postgres_data:
+  recovery_socket:
+  recovery_spool:
+  recovery_repository:

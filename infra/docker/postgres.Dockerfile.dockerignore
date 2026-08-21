@@ -1,0 +1,7 @@
+**
+!infra/
+!infra/backup/
+!infra/backup/pgbackrest.conf
+!infra/postgres/
+!infra/postgres/init/
+!infra/postgres/init/10-create-application-role.sh

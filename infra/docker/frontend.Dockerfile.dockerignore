@@ -1,0 +1,11 @@
+**
+!frontend/
+!frontend/**
+!infra/
+!infra/caddy/
+!infra/caddy/Caddyfile
+frontend/.env
+frontend/.env.*
+frontend/coverage
+frontend/dist
+frontend/node_modules

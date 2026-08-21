@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-This file is the working backlog for the six day hospital operations pilot. The build starts on 15 August 2026 and ends with a production candidate on 20 August 2026. The pilot is designed for one small hospital, up to 30 doctors, 500 appointments each day, and 50 concurrent users.
+This file is the working backlog for the hospital operations pilot. The requested three day build window was 15 August 2026 through 17 August 2026. Execution resumed on 22 August 2026 after the interrupted session, so the verification record uses the actual completion date. The pilot is designed for one small hospital, up to 30 doctors, 500 appointments each day, and 50 concurrent users.
 
 The name MediQueue is a temporary development name. The approved hospital name, logo, contact details, privacy notice, and consent text must replace it before real patients use the system.
 
@@ -39,7 +39,21 @@ The name MediQueue is a temporary development name. The approved hospital name, 
 
 If one person performs more than one role, the acceptance evidence must still identify which responsibility was exercised.
 
-## 4. Day 1, 15 August 2026
+### 3.3 Current three day execution
+
+The following schedule supersedes the original six day calendar without removing any Priority 0 feature or release gate.
+
+1. Day 1, 15 August 2026, closes implementation and security blockers. It completes all identity, directory, scheduling, appointment, reception, queue, payment, notification, audit, interface, dependency, migration, and permission work. The day ends only when backend and frontend suites are clean on PostgreSQL.
+2. Day 2, 16 August 2026, proves the assembled system. It covers same origin container smoke tests, concurrency, 50 user load, accessibility review, dependency and source scans, non root runtime checks, database role separation, encrypted backup, clean restore, migration rehearsal, and rollback rehearsal.
+3. Day 3, 17 August 2026, completes review and delivery. It covers the private pull request, required CI checks, synthetic data role walkthroughs, doctor and receptionist UAT evidence where representatives are available, documentation reconciliation, production candidate tagging, and the explicit real data decision.
+
+Work continues in parallel where tasks do not mutate the same files or test data. A failed Priority 0 check immediately becomes the next task. Priority 2 work may be deferred only after all Priority 0 and Priority 1 acceptance conditions pass.
+
+### 3.4 Current execution record
+
+On 22 August 2026, the complete local candidate passed 113 Django tests on PostgreSQL 18 with 87 percent coverage, 55 frontend tests with 88.88 percent line coverage, five Chromium role workflows, same origin health checks, and the 50 user quick read gate. The encrypted backup and clean isolated restore also passed. Repository CI, external staging, hospital UAT, production SMTP, approved infrastructure, and the real data approvals remain separate gates and must not be described as complete until their named owners provide evidence.
+
+## 4. Foundation work package
 
 ### 4.1 Complete the planning record
 
@@ -71,7 +85,7 @@ Priority: 0
 Owner: Backend owner and frontend owner  
 Dependencies: Task 4.3  
 Work: Create the Django 5.2 LTS API and React 19 application with JavaScript, Vite, Tailwind CSS, and a shared accessible component foundation. Use Python 3.14 and PostgreSQL 18 in every environment. Add exact dependency lockfiles.  
-Acceptance: A new developer can start the approved local services from the documented commands, load the public application shell, and receive a successful response from `/api/v1/health/`.
+Acceptance: A new developer can start the approved local services from the documented commands, load the public application shell, and receive successful responses from `/api/v1/health/live/` and `/api/v1/health/ready/`.
 
 ### 4.5 Build the local and CI service baseline
 
@@ -97,7 +111,7 @@ Dependencies: Task 4.4
 Work: Define typography, color tokens, focus states, form controls, status labels, feedback messages, loading states, responsive navigation, and page shells for public, patient, doctor, reception, and administration areas.  
 Acceptance: The component examples meet keyboard navigation and visible focus requirements, work at 320 CSS pixels, and do not depend on color alone to explain status.
 
-### 4.8 Day 1 review
+### 4.8 Foundation review
 
 Priority: 0  
 Owner: Delivery lead  
@@ -105,7 +119,7 @@ Dependencies: Tasks 4.1 through 4.7
 Work: Review the planning baseline, repository privacy, authentication boundary, CI result, and open risks with the team.  
 Acceptance: The daily record names completed tasks, failed tasks, owners for corrective work, and any approved Priority 2 deferral. No feature work is accepted if the planning first rule was broken.
 
-## 5. Day 2, 16 August 2026
+## 5. Directory and identity work package
 
 ### 5.1 Implement hospital structure
 
@@ -163,7 +177,7 @@ Dependencies: Tasks 5.1 through 5.5
 Work: Create repeatable synthetic data for departments, locations, doctors, schedules, patients, and consent. Do not copy names, contact details, or signatures from supplied documents.  
 Acceptance: The seed is deterministic enough for demonstrations and tests, contains no real personal data, and can be rerun without creating uncontrolled duplicates.
 
-### 5.8 Day 2 hospital review
+### 5.8 Directory and identity hospital review
 
 Priority: 0  
 Owner: Hospital administrator and doctor representative  
@@ -171,7 +185,7 @@ Dependencies: Tasks 5.1 through 5.6
 Work: Review department wording, chamber assignment, doctor directory fields, schedule creation, closures, and the staff invitation path.  
 Acceptance: Review notes identify accepted behavior and any correction with owner and deadline. A schedule or permission concern that can affect booking remains release blocking.
 
-## 6. Day 3, 17 August 2026
+## 6. Appointment and reception work package
 
 ### 6.1 Implement transactional appointment booking
 
@@ -221,7 +235,7 @@ Dependencies: Tasks 6.1 and 6.4
 Work: Record integer BDT minor units with `unpaid`, `paid_on_site`, `waived`, and `refunded` states. Do not collect or store card details. Require a reason and audit event for waiver, refund, or correction.  
 Acceptance: Repeated writes remain idempotent, invalid transitions are rejected, totals can be reconciled from immutable history, and patient responses expose only the patient’s own payment information.
 
-### 6.7 Day 3 hospital review
+### 6.7 Appointment and reception hospital review
 
 Priority: 0  
 Owner: Receptionist representative and hospital administrator  
@@ -229,7 +243,7 @@ Dependencies: Tasks 6.1 through 6.6
 Work: Run registration, duplicate warning, booking, rescheduling, cancellation, check in, walk in, and onsite payment scenarios using synthetic data.  
 Acceptance: The hospital review signs off each critical flow or records a release blocking defect with severity, evidence, owner, and next test date.
 
-## 7. Day 4, 18 August 2026
+## 7. Queue and notification work package
 
 ### 7.1 Implement queue sessions and event history
 
@@ -279,7 +293,7 @@ Dependencies: Tasks 7.2 and 7.3
 Work: Record queue order inputs, estimate versions, override reasons, prediction ranges, actual service starts, actual durations, notification outcomes, and stale snapshot events without creating a medical triage score.  
 Acceptance: An administrator can inspect why an order or estimate was produced, while patients and unauthorized staff cannot access operational analytics about other patients.
 
-### 7.7 Day 4 hospital review
+### 7.7 Queue and notification hospital review
 
 Priority: 0  
 Owner: Doctor representative and receptionist representative  
@@ -287,13 +301,13 @@ Dependencies: Tasks 7.1 through 7.5
 Work: Run a complete queue with check in, call, start, defer, restore, complete, no show, concurrent action, email failure, and patient polling scenarios.  
 Acceptance: Doctor and reception representatives approve the controls and wording, or every rejected point is entered as a release blocking defect.
 
-## 8. Day 5, 19 August 2026
+## 8. Release hardening work package
 
 ### 8.1 Complete role dashboards
 
 Priority: 0  
 Owner: Frontend owner and backend owner  
-Dependencies: Days 2 through 4  
+Dependencies: Tasks 5.1 through 7.5
 Work: Complete patient, doctor, receptionist, and administrator dashboards with role appropriate summaries, actions, accessible loading behavior, empty states, and failures.  
 Acceptance: Each role sees only its approved data and can reach its critical daily task without depending on a hidden or unauthorized route.
 
@@ -301,7 +315,7 @@ Acceptance: Each role sees only its approved data and can reach its critical dai
 
 Priority: 0  
 Owner: Backend owner and frontend owner  
-Dependencies: Days 2 through 4  
+Dependencies: Tasks 5.1, 5.2, 7.5, and 7.6
 Work: Complete hospital configuration, staff state, operational notification failures, audit event filters, and export controls. Prevent audit mutation through application APIs.  
 Acceptance: Authorized administrators can investigate an appointment, payment, queue, consent, and staff access event by request identifier or business identifier, and no interface can edit an audit event.
 
@@ -317,7 +331,7 @@ Acceptance: Automated checks have no serious or critical findings and the keyboa
 
 Priority: 0  
 Owner: Backend owner and operations owner  
-Dependencies: Days 3 and 4  
+Dependencies: Tasks 6.1, 6.5, 7.1, 7.2, 7.3, and 7.4
 Work: Test final slot contention, repeated writes, simultaneous call next, duplicate check in, queue polling, and a 50 concurrent user workload.  
 Acceptance: Data invariants hold and measured p95 latency is at most 500 ms for reads and 800 ms for writes, with queue freshness no more than 15 seconds during the approved workload.
 
@@ -337,21 +351,21 @@ Dependencies: Tasks 8.1 through 8.3
 Work: Write short guidance for patients, doctors, receptionists, administrators, incident contacts, queue fallbacks, and known pilot limits.  
 Acceptance: A new representative can complete the role’s critical scenario from the guidance without developer assistance.
 
-### 8.7 Day 5 hospital review
+### 8.7 Release hardening hospital review
 
 Priority: 0  
 Owner: Hospital administrator, doctor representative, and receptionist representative  
 Dependencies: Tasks 8.1 through 8.6  
 Work: Run the complete synthetic data acceptance suite on the release candidate interface.  
-Acceptance: Each role signs the recorded UAT result. Any failed critical scenario blocks Day 6 release work until corrected and rerun.
+Acceptance: Each role signs the recorded UAT result. Any failed critical scenario blocks release work until corrected and rerun.
 
-## 9. Day 6, 20 August 2026
+## 9. Verification and release work package
 
 ### 9.1 Run the complete verification suite
 
 Priority: 0  
 Owner: Delivery lead  
-Dependencies: Days 1 through 5  
+Dependencies: Tasks 4.8 through 8.6
 Work: Run backend, frontend, end to end, permission, state, concurrency, load, accessibility, dependency, container, security, and Django deployment checks from a clean revision.  
 Acceptance: All required checks pass, backend domain and API coverage is at least 85 percent, frontend logic coverage is at least 75 percent, and every authorization, transaction, and state path is directly tested regardless of coverage percentage.
 
@@ -427,7 +441,7 @@ Acceptance: Real data use begins only after every gate has named evidence and wr
 
 ## 12. Deferred work
 
-The following work is outside the six day pilot and must not be added by weakening the required scope:
+The following work is outside the current pilot and must not be added by weakening the required scope:
 
 1. Electronic medical record notes, diagnoses, prescriptions, laboratory, pharmacy, inpatient care, beds, and clinical decision support.
 2. Insurance, inventory, payroll, accounting, online payment processing, card storage, and financial settlement integrations.
@@ -438,4 +452,4 @@ The following work is outside the six day pilot and must not be added by weakeni
 
 ## 13. Release completion definition
 
-The six day task plan is complete when the tagged production candidate passes all required tests, hospital UAT is signed for the tested revision, staging is healthy, the backup and rollback evidence is current, all release blocking defects are closed, and the release record states clearly whether the real data gates remain pending.
+The three day completion plan is complete when the tagged production candidate passes all required tests, hospital UAT is signed for the tested revision, staging is healthy, the backup and rollback evidence is current, all release blocking defects are closed, and the release record states clearly whether the real data gates remain pending.

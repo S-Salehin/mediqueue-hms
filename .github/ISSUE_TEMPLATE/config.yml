@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security or privacy concern privately
+    url: https://github.com/S-Salehin/mediqueue-hms/security/advisories/new
+    about: Do not disclose a vulnerability or personal data in a public issue.

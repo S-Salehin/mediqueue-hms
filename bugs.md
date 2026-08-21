@@ -112,11 +112,17 @@ The person who implements a correction must not be the only verifier for an `S0`
 
 ## 7. Implementation defect register
 
-No implementation defect existed at the audit baseline because no runnable application or source revision was supplied. New `CODE`, `DATA`, `OPS`, `SEC`, and `A11Y` defects must be added here as implementation and verification begin. Do not close an inherited defect merely because a file or screen has been created. Close the related implementation risk only when its acceptance and regression tests pass.
+No implementation defect existed at the audit baseline because no runnable application or source revision was supplied. The following defects were found during implementation and closed before repository review. Do not close an inherited defect merely because a file or screen has been created. Close the related implementation risk only when its acceptance and regression tests pass.
 
 | ID | Severity | Environment and revision | Expected and actual result | Owner | Status | Regression test |
 | --- | --- | --- | --- | --- | --- | --- |
-| None at baseline |  |  |  |  |  |  |
+| SEC-001 Superseded account link could remain queued | S1 High | Local test stack, working candidate | A worker must send only an active single use link. Earlier verification, reset, claim, or invitation jobs could otherwise outlive their token. | Backend owner | Closed 22 August 2026 | Outbox inactive secure link and verification resend tests |
+| SEC-002 MFA replacement challenge had no short expiry | S1 High | Local API tests, working candidate | A staff MFA replacement must end after a short bounded session. The intermediate challenge previously depended only on the wider session controls. | Backend owner | Closed 22 August 2026 | MFA replacement expiry and one time authenticator tests |
+| CODE-001 Refund correction lacked a reference requirement | S1 High | Local API and service tests, working candidate | Every refund or payment correction must carry a bounded receipt or correction reference. The service previously permitted an empty reference. | Backend owner | Closed 22 August 2026 | Payment legal transition and least privilege API tests |
+| CODE-002 Schedule edits could diverge from booked visits | S1 High | Pull request review on commit `11cbe29` | A booked visit must retain the doctor, chamber, location, date, and duration that were confirmed. Structural schedule edits previously changed the referenced template without reconciling its appointments. | Backend owner | Closed 22 August 2026 | Schedule identity and confirmed capacity API regression test |
+| OPS-001 Web runtime image exited without serving | S1 High | Disposable Compose test stack, working candidate | The runtime image must start Caddy. The final image inherited no command and exited with status zero. | Operations owner | Closed 22 August 2026 | Same origin Compose health and five Chromium workflows |
+| OPS-002 Container coverage file used application directory | S2 Medium | Disposable backend test container, working candidate | Coverage evidence must write to a bounded temporary path. The first run passed all tests but could not save `/app/.coverage`. | Operations owner | Closed 22 August 2026 | Read only backend test container completed 112 tests and the 85 percent gate |
+| OPS-003 CI used a removed coverage XML option | S2 Medium | GitHub Actions run 32522373133, commit `7dca466` | A green 112 test run must publish its XML evidence. Coverage 7.15 rejected the older `--output` spelling after the tests and threshold had passed. | Operations owner | Closed 22 August 2026 | Backend workflow uses the supported `coverage xml -o` command |
 
 ## 8. Triage and correction process
 

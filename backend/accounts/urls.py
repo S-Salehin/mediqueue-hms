@@ -1,0 +1,43 @@
+from django.urls import path
+
+from .views import (
+    ClaimPatientAcceptView,
+    CSRFView,
+    EmailVerificationResendView,
+    EmailVerifyView,
+    ForgotPasswordView,
+    LoginView,
+    LogoutView,
+    MFAConfirmView,
+    MFAReplacementConfirmView,
+    MFAReplacementStartView,
+    MFAVerifyView,
+    RegisterView,
+    ResetPasswordView,
+    SessionView,
+    StaffDeactivateView,
+    StaffInvitationAcceptView,
+    StaffInvitationView,
+    StaffListView,
+)
+
+urlpatterns = [
+    path("auth/csrf/", CSRFView.as_view()),
+    path("auth/session/", SessionView.as_view()),
+    path("auth/login/", LoginView.as_view()),
+    path("auth/mfa/verify/", MFAVerifyView.as_view()),
+    path("auth/mfa/confirm/", MFAConfirmView.as_view()),
+    path("auth/mfa/replacement/start/", MFAReplacementStartView.as_view()),
+    path("auth/mfa/replacement/confirm/", MFAReplacementConfirmView.as_view()),
+    path("auth/logout/", LogoutView.as_view()),
+    path("auth/register/", RegisterView.as_view()),
+    path("auth/email/verify/", EmailVerifyView.as_view()),
+    path("auth/email/resend/", EmailVerificationResendView.as_view()),
+    path("auth/patient-claims/accept/", ClaimPatientAcceptView.as_view()),
+    path("auth/password/forgot/", ForgotPasswordView.as_view()),
+    path("auth/password/reset/", ResetPasswordView.as_view()),
+    path("admin/staff-invitations/", StaffInvitationView.as_view()),
+    path("admin/staff/", StaffListView.as_view()),
+    path("admin/staff/<uuid:user_id>/deactivate/", StaffDeactivateView.as_view()),
+    path("auth/staff-invitations/accept/", StaffInvitationAcceptView.as_view()),
+]

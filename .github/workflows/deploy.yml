@@ -1,0 +1,75 @@
+name: Deploy an approved release
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Protected GitHub environment and remote environment name
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      release:
+        description: Existing release tag such as v0.1.0-rc.1
+        required: true
+        type: string
+      confirmation:
+        description: Type DEPLOY followed by the environment and release, separated by colons
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.release }} to ${{ inputs.environment }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    env:
+      DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+      RELEASE_ID: ${{ inputs.release }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - name: Check out the release control files
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Validate the request and release tag
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          [[ "${RELEASE_ID}" =~ ^v[0-9A-Za-z][0-9A-Za-z._-]{2,79}$ ]]
+          [[ "${CONFIRMATION}" == "DEPLOY:${DEPLOY_ENVIRONMENT}:${RELEASE_ID}" ]]
+          git show-ref --verify --quiet "refs/tags/${RELEASE_ID}"
+
+      - name: Configure the pinned deployment host key
+        shell: bash
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          install -d -m 0700 "${HOME}/.ssh"
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > "${HOME}/.ssh/id_ed25519"
+          printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
+          chmod 0600 "${HOME}/.ssh/id_ed25519" "${HOME}/.ssh/known_hosts"
+
+      - name: Run the guarded remote deployment
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -Eeuo pipefail
+          [[ "${DEPLOY_HOST}" =~ ^[A-Za-z0-9.-]+$ ]]
+          [[ "${DEPLOY_USER}" =~ ^[A-Za-z_][A-Za-z0-9_-]{0,31}$ ]]
+          ssh -o BatchMode=yes -o IdentitiesOnly=yes "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "cd /srv/mediqueue && git fetch --tags --prune && git checkout --detach '${RELEASE_ID}' && bash scripts/deploy.sh --environment '${DEPLOY_ENVIRONMENT}' --env-file '/etc/mediqueue/${DEPLOY_ENVIRONMENT}.env' --release '${RELEASE_ID}' --confirm 'DEPLOY:${DEPLOY_ENVIRONMENT}:${RELEASE_ID}'"

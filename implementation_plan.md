@@ -109,6 +109,7 @@ Modules communicate through explicit service functions. Views and serializers do
 3. Overlapping active schedules for the same doctor or chamber are rejected for the same effective period.
 4. Availability is computed from the schedule and exception, then reduced by active confirmed appointment capacity inside a transaction when a booking is made.
 5. Slots are returned as UTC start and end timestamps with an Asia/Dhaka display value. Past slots and closed periods are never bookable.
+6. A schedule row is locked for booking and administration changes. Once an appointment references it, structural fields are immutable. A changed doctor, chamber, location, weekday, time, duration, or effective period requires a deactivated old schedule and a new schedule. Capacity cannot be reduced below the largest confirmed booking count for an existing slot.
 
 ### 5.6 Appointments
 
@@ -214,11 +215,12 @@ Validation, conflict, permission, authentication, rate limit, and server errors 
 5. `POST /api/v1/auth/logout/` ends the session.
 6. `POST /api/v1/auth/register/` creates a patient registration pending email verification.
 7. `POST /api/v1/auth/email/verify/` consumes a single use verification token.
-8. `POST /api/v1/auth/password/forgot/` creates a privacy safe reset request.
-9. `POST /api/v1/auth/password/reset/` consumes a single use reset token and revokes existing sessions according to policy.
-10. `GET` and `PATCH /api/v1/me/patient-profile/` read and update the patient’s approved fields.
-11. `GET /api/v1/me/consents/` lists the patient’s consent history.
-12. `POST /api/v1/me/consents/` records a new versioned decision.
+8. `POST /api/v1/auth/email/resend/` returns one generic accepted response and replaces any earlier unused verification link only when an unverified account exists.
+9. `POST /api/v1/auth/password/forgot/` creates a privacy safe reset request.
+10. `POST /api/v1/auth/password/reset/` consumes a single use reset token and revokes existing sessions according to policy.
+11. `GET` and `PATCH /api/v1/me/patient-profile/` read and update the patient’s approved fields.
+12. `GET /api/v1/me/consents/` lists the patient’s consent history.
+13. `POST /api/v1/me/consents/` records a new versioned decision.
 
 ### 7.4 Directory and scheduling routes
 
@@ -319,7 +321,7 @@ Validation, conflict, permission, authentication, rate limit, and server errors 
 2. `/patient/appointments` lists the patient’s appointments.
 3. `/patient/appointments/new` runs doctor, date, slot, review, and confirmation steps.
 4. `/patient/appointments/:appointmentId` shows one authorized appointment, queue entry when checked in, and payment summary.
-5. `/patient/queue/:ticketId` shows only the patient’s token, current served token, people ahead, wait range, recommended arrival window, confidence, connection state, and last update.
+5. `/patient/queue/:queueId` shows only the patient’s token, current served token, people ahead, wait range, recommended arrival window, confidence, connection state, and last update.
 6. `/patient/notifications`, `/patient/profile`, and `/patient/privacy` manage the patient’s own messages, approved profile fields, and consent decisions.
 
 ### 9.3 Doctor routes
@@ -425,12 +427,9 @@ Validation, conflict, permission, authentication, rate limit, and server errors 
 
 ## 14. Build sequence
 
-1. On 15 August 2026, complete the planning record, repository controls, application scaffold, identity foundation, CI, and design system.
-2. On 16 August 2026, complete roles, invitations, patient registration, duplicate warnings, hospital structure, doctors, schedules, closures, availability, and synthetic seed data.
-3. On 17 August 2026, complete transactional booking, rescheduling, cancellation, receptionist flows, check in, walk ins, and onsite payment records.
-4. On 18 August 2026, complete queue sessions, queue controls, Adaptive Arrival Window, privacy safe polling, notification outbox, email worker, and fairness records.
-5. On 19 August 2026, complete dashboards, administration, audit search, responsive behavior, accessibility, concurrency, load, security checks, and user guidance.
-6. On 20 August 2026, run the complete suite, prove backup restoration, rehearse migration and rollback, complete browser smoke tests and hospital UAT, then tag the production candidate.
+1. On 15 August 2026, close every remaining identity, directory, scheduling, booking, reception, queue, payment, notification, audit, interface, dependency, migration, permission, and test blocker. The planning record, repository controls, application scaffold, role interfaces, and main domain flows already exist and are reverified rather than rebuilt.
+2. On 16 August 2026, prove the assembled system through PostgreSQL tests, concurrency, same origin container smoke tests, 50 user load, accessibility review, security scans, non root runtime checks, database role separation, encrypted backup, clean restore, migration rehearsal, and rollback rehearsal.
+3. On 17 August 2026, run the final suite, complete browser smoke tests and available hospital UAT, reconcile every release document, merge the reviewed private pull request, and tag the production candidate only after every required technical check passes.
 
 ## 15. External services and future interoperability
 

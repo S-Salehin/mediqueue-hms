@@ -1,0 +1,15 @@
+Django==5.2.17
+djangorestframework==3.17.2
+psycopg[binary]==3.3.4
+pyotp==2.10.0
+cryptography==50.0.0
+whitenoise==6.11.0
+gunicorn==23.0.0
+asgiref==3.12.1
+cffi==2.1.1
+packaging==26.3
+psycopg-binary==3.3.4
+pycparser==3.0
+sqlparse==0.6.0
+typing-extensions==4.16.0
+tzdata==2026.3

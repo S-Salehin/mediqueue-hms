@@ -49,6 +49,7 @@ test-results/
 /media/
 /staticfiles/
 /backups/
+/reports/
 /postgres-data/
 
 # Local editor and operating system files
