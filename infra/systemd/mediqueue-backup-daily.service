@@ -1,0 +1,13 @@
+[Unit]
+Description=MediQueue daily full PostgreSQL backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=mediqueue-deploy
+WorkingDirectory=/srv/mediqueue
+ExecStart=/usr/bin/bash /srv/mediqueue/scripts/backup.sh --environment production --env-file /etc/mediqueue/production.env --type full --confirm BACKUP:production
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

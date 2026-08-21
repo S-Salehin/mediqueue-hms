@@ -1,0 +1,131 @@
+name: Build release images
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY_NAMESPACE: ghcr.io/s-salehin
+
+jobs:
+  build:
+    name: Build, scan, and publish ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            context: .
+            file: infra/docker/backend.Dockerfile
+          - name: web
+            context: .
+            file: infra/docker/frontend.Dockerfile
+          - name: db
+            context: .
+            file: infra/docker/postgres.Dockerfile
+    steps:
+      - name: Check out the reviewed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Sign in to the private registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build the local scan candidate
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          load: true
+          push: false
+          tags: local/mediqueue-${{ matrix.name }}:${{ github.sha }}
+          build-args: APP_VERSION=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Scan the release candidate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: local/mediqueue-${{ matrix.name }}:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "1"
+          format: table
+
+      - name: Verify the reviewed source label
+        env:
+          LOCAL_IMAGE: local/mediqueue-${{ matrix.name }}:${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          revision="$(docker image inspect "${LOCAL_IMAGE}" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          [[ "${revision}" == "${GITHUB_SHA}" ]]
+
+      - name: Generate SPDX SBOM for the reviewed image
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: local/mediqueue-${{ matrix.name }}:${{ github.sha }}
+          format: spdx-json
+          output-file: mediqueue-${{ matrix.name }}.spdx.json
+          upload-artifact: false
+
+      - name: Publish the exact reviewed image
+        id: publish
+        env:
+          LOCAL_IMAGE: local/mediqueue-${{ matrix.name }}:${{ github.sha }}
+          PUBLISHED_IMAGE: ${{ env.REGISTRY_NAMESPACE }}/mediqueue-${{ matrix.name }}:${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          local_id="$(docker image inspect "${LOCAL_IMAGE}" --format '{{.Id}}')"
+          docker image tag "${LOCAL_IMAGE}" "${PUBLISHED_IMAGE}"
+          tagged_id="$(docker image inspect "${PUBLISHED_IMAGE}" --format '{{.Id}}')"
+          [[ "${local_id}" == "${tagged_id}" ]]
+          docker image push "${PUBLISHED_IMAGE}"
+          published_digest="$(docker buildx imagetools inspect "${PUBLISHED_IMAGE}" --format '{{.Manifest.Digest}}')"
+          [[ "${published_digest}" =~ ^sha256:[a-f0-9]{64}$ ]]
+          immutable_image="${PUBLISHED_IMAGE%%:*}@${published_digest}"
+          docker image pull "${immutable_image}"
+          registry_id="$(docker image inspect "${immutable_image}" --format '{{.Id}}')"
+          [[ "${local_id}" == "${registry_id}" ]]
+          printf 'digest=%s\n' "${published_digest}" >> "${GITHUB_OUTPUT}"
+          printf 'image=%s\n' "${immutable_image}" >> "${GITHUB_OUTPUT}"
+
+      - name: Attest the published image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.REGISTRY_NAMESPACE }}/mediqueue-${{ matrix.name }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
+          push-to-registry: true
+
+      - name: Record the immutable published image
+        run: |
+          printf '%s\n' '${{ steps.publish.outputs.image }}' | tee 'mediqueue-${{ matrix.name }}.image.txt'
+          printf '%s\n' '${{ steps.publish.outputs.image }}' >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload release evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mediqueue-${{ matrix.name }}-release-evidence
+          path: |
+            mediqueue-${{ matrix.name }}.spdx.json
+            mediqueue-${{ matrix.name }}.image.txt
+          retention-days: 90

@@ -54,6 +54,8 @@ Every release candidate must remain healthy in staging while the smoke test, mig
 
 Production runs only signed or traceable images built from the protected main branch. Debug mode is disabled. Source maps are not publicly served. Production email is enabled only after the hospital approves the sender domain and privacy safe templates.
 
+SMTP connections use the bounded `SMTP_TIMEOUT_SECONDS` setting. The default is 10 seconds and accepted values are from 1 through 60 seconds. A slow or unavailable mail server cannot hold the worker indefinitely, and notification retries never reverse a committed hospital action.
+
 The production database is used only by the application, worker, backup job, and authorised database administrator. Direct changes through a database console are prohibited except during an approved incident procedure, and every emergency correction must be documented in the incident record.
 
 ## 4. Production host and network
@@ -87,7 +89,7 @@ The database volume, Caddy data, and backup cache are the only persistent servic
 
 Production configuration is stored outside Git in `/etc/mediqueue/production.env`, owned by root and readable only by the deployment account and authorised services. The Compose file refers to values by name. It never contains a working password.
 
-Required production secrets include the Django secret key, PostgreSQL password, SMTP credentials, backup repository credentials, backup encryption key, and monitoring alert token. Required nonsecret settings include the public origin, trusted proxy settings, timezone, sender address, hospital identity, support contact, session duration, and privacy notice version.
+Required application and deployment secrets include the Django secret key, separate MFA encryption key, three PostgreSQL role passwords, SMTP credentials, backup encryption key, and private registry read token. Credentials for off host replication and alert delivery belong in their separately approved operator services, not in the application environment file. Required nonsecret settings include the public origin, trusted proxy settings, timezone, sender address, hospital identity, support contact, session duration, and privacy notice version.
 
 1. Secrets must be randomly generated and unique to each environment.
 2. Logs, error pages, health endpoints, build output, and support screenshots must never print a secret.
@@ -96,6 +98,8 @@ Required production secrets include the Django secret key, PostgreSQL password, 
 5. SMTP and monitoring credentials are scoped to the minimum required permissions.
 6. Backup credentials allow access only to the dedicated encrypted repository.
 7. Departing operators have access removed on their final working day or immediately when risk requires it.
+
+`REAL_DATA_APPROVED` remains false until all launch evidence is signed. `OFF_HOST_BACKUP_APPROVED` remains false until the separate encrypted copy is configured and a restore from that copy succeeds. Production validation requires both values before real patient data is permitted.
 
 The deployment operator compares the required setting names with the committed example before every release. Missing, blank, development, or placeholder values cause startup to fail.
 

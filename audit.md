@@ -92,7 +92,7 @@ Source: `Defense_Phase 1 (0242220005101064).pdf`
 | Wait estimate | Supplied booking, patient, and doctor images | Display a range, confidence label, last updated time, and stale state. Use historical service duration only. Do not infer medical urgency. | Replaced design |
 | Notifications | Supplied booking and patient images | Provide in app and privacy safe email notifications through a transactional outbox. Email failure must not roll back a valid business event. | Accepted with controls |
 | Dashboard totals | Title pp. 4 to 5, Proposal p. 3, Defense pp. 4 and 7 | Show role appropriate operational counts. Do not expose patient lists or sensitive aggregates to public users. | Accepted with restriction |
-| Contact messages | Defense p. 5 ER diagram | A public contact form is not required for the six day pilot. Publish an approved hospital contact route instead. | Deferred |
+| Contact messages | Defense p. 5 ER diagram | A public contact form is not required for the current pilot. Publish an approved hospital contact route instead. | Deferred |
 | About content | Defense pp. 3 and 5 | Store approved hospital identity as configuration if needed. A general purpose content management system is not required. | Simplified |
 | Security | Title p. 4, Defense pp. 3 and 10 | Treat security as release work. Apply OWASP ASVS 5.0 Level 2 controls where applicable and verify them. No blanket “secure” claim is permitted. | Required gate |
 | Accessibility | “User friendly” throughout, but no standard is named | Target WCAG 2.2 AA for complete critical workflows and test with keyboard and screen reader use. | Required production addition |
@@ -104,7 +104,7 @@ Source: `Defense_Phase 1 (0242220005101064).pdf`
 
 | Finding | Conflicting evidence | Accepted resolution |
 | --- | --- | --- |
-| Educational system versus live hospital system | Title p. 5 says educational and small scale, not commercial. The delivery brief requires a deployed hospital system. | The six day result is a production candidate and controlled pilot. Real patient data remains prohibited until legal, hospital, security, infrastructure, restore, and UAT gates pass. |
+| Educational system versus live hospital system | Title p. 5 says educational and small scale, not commercial. The delivery brief requires a deployed hospital system. | The result is a production candidate and controlled pilot. Real patient data remains prohibited until legal, hospital, security, infrastructure, restore, and UAT gates pass. |
 | Frontend stack | Title p. 2 and Proposal pp. 2 to 4 specify React. Defense p. 2 and the older screens use server rendered HTML, CSS, and Bootstrap. | React 19 with JavaScript, Vite, Tailwind CSS, and an accessible custom component layer. |
 | Database | Title and Proposal alternate between MySQL and SQLite. Defense alternates between SQLite and MySQL. | PostgreSQL 18 in local, CI, staging, and production because booking and queue correctness depend on transactions, row locks, and constraints. |
 | Interface library | Title and Proposal leave Tailwind or Bootstrap undecided. Defense uses Bootstrap. | Tailwind CSS plus project owned accessible components. Do not combine two component systems. |

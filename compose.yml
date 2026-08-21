@@ -1,0 +1,193 @@
+name: ${COMPOSE_PROJECT_NAME:-mediqueue-dev}
+
+x-app-environment: &app-environment
+  APP_VERSION: ${APP_VERSION:-local}
+  DATABASE_URL: ${DATABASE_URL:-postgresql://mediqueue_runtime:change-this-local-runtime-password@db:5432/mediqueue}
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-this-local-secret-key-before-starting}
+  MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:-}
+  DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,api}
+  DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:8080}
+  DJANGO_SECURE_COOKIES: ${DJANGO_SECURE_COOKIES:-false}
+  DJANGO_BEHIND_PROXY: ${DJANGO_BEHIND_PROXY:-true}
+  HOSPITAL_TIME_ZONE: ${HOSPITAL_TIME_ZONE:-Asia/Dhaka}
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-MediQueue Development <no-reply@localhost>}
+  EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
+  SMTP_HOST: ${SMTP_HOST:-mailpit}
+  SMTP_PORT: ${SMTP_PORT:-1025}
+  SMTP_USERNAME: ${SMTP_USERNAME:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
+  SMTP_TIMEOUT_SECONDS: ${SMTP_TIMEOUT_SECONDS:-10}
+  OUTBOX_POLL_SECONDS: ${OUTBOX_POLL_SECONDS:-2}
+  SESSION_IDLE_TIMEOUT_SECONDS: ${SESSION_IDLE_TIMEOUT_SECONDS:-1800}
+  SESSION_ABSOLUTE_TIMEOUT_SECONDS: ${SESSION_ABSOLUTE_TIMEOUT_SECONDS:-28800}
+
+x-service-defaults: &service-defaults
+  init: true
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-file: "3"
+      max-size: 10m
+
+services:
+  db:
+    <<: *service-defaults
+    image: postgres:18.6-alpine3.23@sha256:f65cfc1a73466fc0807f4a33496e1c438b19269091c8f998faec871874df8e5e
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mediqueue}
+      POSTGRES_USER: ${POSTGRES_USER:-mediqueue_bootstrap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-local-password}
+      MEDIQUEUE_MIGRATION_USER: ${MEDIQUEUE_MIGRATION_USER:-mediqueue_owner}
+      MEDIQUEUE_MIGRATION_PASSWORD: ${MEDIQUEUE_MIGRATION_PASSWORD:-change-this-local-owner-password}
+      MEDIQUEUE_APP_USER: ${MEDIQUEUE_APP_USER:-mediqueue_runtime}
+      MEDIQUEUE_APP_PASSWORD: ${MEDIQUEUE_APP_PASSWORD:-change-this-local-runtime-password}
+      TZ: UTC
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./infra/postgres/init/10-create-application-role.sh:/docker-entrypoint-initdb.d/10-create-application-role.sh:ro
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username=$${POSTGRES_USER} --dbname=$${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+      start_period: 10s
+
+  api:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: infra/docker/backend.Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-local}
+    command:
+      - sh
+      - -c
+      - DATABASE_URL="$${MIGRATION_DATABASE_URL}" python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000
+    environment:
+      <<: *app-environment
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:-postgresql://mediqueue_owner:change-this-local-owner-password@db:5432/mediqueue}
+    volumes:
+      - ./backend:/app
+    networks:
+      - data
+      - service
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,urllib.request; h=os.environ['DJANGO_ALLOWED_HOSTS'].split(',')[0]; r=urllib.request.Request('http://127.0.0.1:8000/api/v1/health/ready/',headers={'Host':h}); urllib.request.urlopen(r,timeout=3)"]
+      interval: 8s
+      timeout: 4s
+      retries: 15
+      start_period: 20s
+
+  worker:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: infra/docker/backend.Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-local}
+    environment: *app-environment
+    command: ["python", "manage.py", "process_outbox", "--loop"]
+    volumes:
+      - ./backend:/app
+    networks:
+      - data
+      - service
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 4
+      start_period: 10s
+
+  frontend:
+    <<: *service-defaults
+    image: node:24.19.0-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43
+    working_dir: /app
+    command: ["sh", "-c", "npm ci && npm run dev -- --host 0.0.0.0"]
+    environment:
+      VITE_APP_VERSION: ${APP_VERSION:-local}
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    networks:
+      - service
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:5173/ || exit 1"]
+      interval: 8s
+      timeout: 4s
+      retries: 15
+      start_period: 20s
+
+  caddy:
+    <<: *service-defaults
+    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    environment:
+      PUBLIC_HOSTNAME: :80
+    ports:
+      - 127.0.0.1:${WEB_PORT:-8080}:8080
+    volumes:
+      - ./infra/caddy/Caddyfile.dev:/etc/caddy/Caddyfile:ro
+    tmpfs:
+      - /config:size=4m,mode=0700,uid=10002,gid=10002
+      - /data:size=4m,mode=0700,uid=10002,gid=10002
+    user: 10002:10002
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - service
+    depends_on:
+      api:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:8090/healthz || exit 1"]
+      interval: 10s
+      timeout: 4s
+      retries: 5
+      start_period: 10s
+
+  mailpit:
+    <<: *service-defaults
+    image: axllent/mailpit:v1.30.7@sha256:d5ecbb067db3705fa953d79e1b7f81ef84038df67aba6c52825d8c02a1ea748a
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    ports:
+      - 127.0.0.1:${MAILPIT_PORT:-8025}:8025
+    volumes:
+      - mailpit_data:/data
+    networks:
+      - service
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 4s
+      retries: 5
+      start_period: 5s
+
+networks:
+  data:
+    internal: true
+  service:
+
+volumes:
+  postgres_data:
+  frontend_node_modules:
+  mailpit_data:

@@ -1,0 +1,75 @@
+name: Defect report
+description: Record a reproducible problem without patient data or credentials
+title: "Bug: "
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include real names, contact details, medical record numbers, credentials, cookies, tokens, email bodies, database exports, or production screenshots.
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - Local development
+        - Continuous integration
+        - Staging
+        - Production
+    validations:
+      required: true
+  - type: input
+    id: release
+    attributes:
+      label: Release or commit
+      placeholder: v0.1.0 or full Git commit
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Affected role
+      options:
+        - Public visitor
+        - Patient
+        - Doctor
+        - Receptionist
+        - Administrator
+        - Operator
+        - More than one role
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Use synthetic record identifiers and number each exact action.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+    validations:
+      required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Initial impact
+      options:
+        - Critical security, privacy, integrity, or service loss
+        - Critical workflow unavailable without a safe workaround
+        - Degraded function with a safe workaround
+        - Minor defect or documentation issue
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Privacy safe evidence
+      description: Add request identifiers and redacted logs. Do not add secrets or personal data.

@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the MediQueue recovery point every hour
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=180
+
+[Install]
+WantedBy=timers.target
