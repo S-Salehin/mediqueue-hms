@@ -42,13 +42,44 @@ async function signIn(page, email, totpSecret = '') {
     await expect(page.getByRole('heading', { name: 'Enter your verification code' })).toBeVisible()
     await page.locator('#mfa-code').fill(currentTotp(totpSecret))
     await page.getByRole('button', { name: /Verify and continue/ }).click()
-    await page.waitForURL(email.startsWith('reception.') ? /\/reception/ : /\/doctor/)
+    const staffWorkspace = email.startsWith('reception.')
+      ? /\/reception/
+      : email.startsWith('admin.')
+        ? /\/admin/
+        : /\/doctor/
+    await page.waitForURL(staffWorkspace)
   } else {
     await page.waitForURL(/\/patient/)
   }
 }
 
+async function verifyWorkspaceNavigation(page, name, routes) {
+  const navigation = page.getByRole('navigation', { name })
+  for (const [path, label] of routes) {
+    await navigation.getByRole('link', { name: label, exact: true }).click()
+    await expect(page).toHaveURL(new RegExp(`${path}$`))
+    await expect(page.locator('#main-content h1').first()).toBeVisible()
+  }
+}
+
 test.describe.serial('production pilot browser flows', () => {
+  test.beforeEach(async ({ page }) => {
+    page.runtimeFailures = []
+    page.on('pageerror', (error) => page.runtimeFailures.push(`Page error: ${error.message}`))
+    page.on('console', (message) => {
+      if (message.type() === 'error') page.runtimeFailures.push(`Console error: ${message.text()}`)
+    })
+    page.on('response', (response) => {
+      if (response.status() >= 500) {
+        page.runtimeFailures.push(`Server error: ${response.status()} ${response.url()}`)
+      }
+    })
+  })
+
+  test.afterEach(async ({ page }) => {
+    expect(page.runtimeFailures).toEqual([])
+  })
+
   test('public service and approved privacy notice load at the same origin', async ({ page }) => {
     await page.goto('/')
     await expect(
@@ -59,6 +90,30 @@ test.describe.serial('production pilot browser flows', () => {
     await expect(
       page.getByRole('heading', { name: 'Synthetic demonstration privacy notice' }),
     ).toBeVisible()
+    await page
+      .getByRole('navigation', { name: 'Primary navigation' })
+      .getByRole('link', {
+        name: 'Find a doctor',
+        exact: true,
+      })
+      .click()
+    await expect(page.getByRole('heading', { name: 'Find a doctor' })).toBeVisible()
+    await page
+      .getByRole('navigation', { name: 'Primary navigation' })
+      .getByRole('link', {
+        name: 'About',
+        exact: true,
+      })
+      .click()
+    await expect(page.getByRole('heading', { name: /A clearer link/ })).toBeVisible()
+    await page
+      .getByRole('navigation', { name: 'Primary navigation' })
+      .getByRole('link', {
+        name: 'Contact',
+        exact: true,
+      })
+      .click()
+    await expect(page.getByRole('heading', { name: 'Reach the hospital team' })).toBeVisible()
   })
 
   test('patient can sign in and inspect real schedule availability', async ({ page }) => {
@@ -77,6 +132,13 @@ test.describe.serial('production pilot browser flows', () => {
       page.getByRole('radiogroup', { name: 'Available appointment times' }),
     ).toBeVisible()
     await expect(page.getByRole('radio').first()).toBeEnabled()
+    await verifyWorkspaceNavigation(page, 'patient navigation', [
+      ['/patient', 'Overview'],
+      ['/patient/appointments', 'Appointments'],
+      ['/patient/notifications', 'Notifications'],
+      ['/patient/profile', 'My profile'],
+      ['/patient/privacy', 'Privacy choices'],
+    ])
   })
 
   test('receptionist completes MFA and checks in the synthetic patient', async ({ page }) => {
@@ -90,6 +152,13 @@ test.describe.serial('production pilot browser flows', () => {
     await expect(row).toBeVisible()
     await row.getByRole('button', { name: 'Check in' }).click()
     await expect(page.getByText(/Checked in\. Queue token/)).toBeVisible()
+    await verifyWorkspaceNavigation(page, 'receptionist navigation', [
+      ['/reception', 'Overview'],
+      ['/reception/patients', 'Patients'],
+      ['/reception/appointments', 'Appointments'],
+      ['/reception/payments', 'Payments'],
+      ['/reception/security', 'Account security'],
+    ])
   })
 
   test('patient sees only a token and non-sensitive location guidance', async ({ page }) => {
@@ -119,5 +188,27 @@ test.describe.serial('production pilot browser flows', () => {
     await queueLink.click()
     await expect(page.getByText('Doctor queue console')).toBeVisible()
     await expect(page.getByText(/Operational first in, first out order/)).toBeVisible()
+    await verifyWorkspaceNavigation(page, 'doctor navigation', [
+      ['/doctor', 'Overview'],
+      ['/doctor/schedule', 'My schedule'],
+      ['/doctor/security', 'Account security'],
+    ])
+  })
+
+  test('administrator completes MFA and every administration workspace opens', async ({ page }) => {
+    await signIn(page, 'admin.demo@example.test', 'MFRGGZDFMZTWQ2LK')
+    await expect(page.getByRole('heading', { name: 'Operational overview' })).toBeVisible()
+    await verifyWorkspaceNavigation(page, 'administrator navigation', [
+      ['/admin', 'Overview'],
+      ['/admin/staff', 'Staff'],
+      ['/admin/departments', 'Departments'],
+      ['/admin/locations', 'Locations'],
+      ['/admin/doctors', 'Doctors'],
+      ['/admin/schedules', 'Schedules'],
+      ['/admin/notifications', 'Delivery status'],
+      ['/admin/audit', 'Audit trail'],
+      ['/admin/settings', 'Settings'],
+      ['/admin/security', 'Account security'],
+    ])
   })
 })

@@ -860,7 +860,7 @@ class APIContractTests(HospitalTestCase):
         with self.assertRaises(Exception) as caught:
             check_in(self.request_for(self.reception_user), appointment.pk)
         self.assertEqual(caught.exception.get_codes(), "check_in_wrong_date")
-        fixed_now = timezone.now()
+        fixed_now = self.start_at + timedelta(hours=2)
         appointment.start_at = fixed_now - timedelta(minutes=16)
         appointment.end_at = fixed_now - timedelta(minutes=1)
         appointment.save(update_fields=["start_at", "end_at", "updated_at"])
