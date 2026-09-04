@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import argparse
 from pathlib import Path
 
 import fitz
@@ -10,9 +11,9 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PDF = ROOT / "report_qa" / "Hospital Management System Final Report.pdf"
-PAGE_DIR = ROOT / "report_qa" / "pages"
-SHEET_DIR = ROOT / "report_qa" / "contact_sheets"
+DEFAULT_PDF = ROOT / "report_qa" / "Hospital Management System Final Report.pdf"
+DEFAULT_PAGE_DIR = ROOT / "report_qa" / "pages"
+DEFAULT_SHEET_DIR = ROOT / "report_qa" / "contact_sheets"
 
 
 def label_font(size=24):
@@ -20,16 +21,34 @@ def label_font(size=24):
     return ImageFont.truetype(str(path), size) if path.exists() else ImageFont.load_default()
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--pdf", type=Path, default=DEFAULT_PDF)
+    parser.add_argument("--page-dir", type=Path, default=DEFAULT_PAGE_DIR)
+    parser.add_argument("--sheet-dir", type=Path, default=DEFAULT_SHEET_DIR)
+    parser.add_argument("--summary", type=Path)
+    return parser.parse_args()
+
+
 def main() -> None:
-    PAGE_DIR.mkdir(parents=True, exist_ok=True)
-    SHEET_DIR.mkdir(parents=True, exist_ok=True)
-    document = fitz.open(PDF)
+    args = parse_args()
+    pdf = args.pdf.resolve()
+    page_dir = args.page_dir.resolve()
+    sheet_dir = args.sheet_dir.resolve()
+    summary = (args.summary or (ROOT / "report_qa" / "render-summary.json")).resolve()
+    page_dir.mkdir(parents=True, exist_ok=True)
+    sheet_dir.mkdir(parents=True, exist_ok=True)
+    for old_page in page_dir.glob("page-*.png"):
+        old_page.unlink()
+    for old_sheet in sheet_dir.glob("sheet-*.jpg"):
+        old_sheet.unlink()
+    document = fitz.open(pdf)
     findings = []
     rendered = []
     for index, page in enumerate(document):
         matrix = fitz.Matrix(1.6, 1.6)
         pixmap = page.get_pixmap(matrix=matrix, alpha=False)
-        path = PAGE_DIR / f"page-{index + 1:03d}.png"
+        path = page_dir / f"page-{index + 1:03d}.png"
         pixmap.save(path)
         rendered.append(path)
         text = " ".join(page.get_text().split())
@@ -67,16 +86,17 @@ def main() -> None:
             label = f"Page {page_number}"
             bounds = draw.textbbox((0, 0), label, font=sheet_font)
             draw.text((x + (thumb_width - (bounds[2] - bounds[0])) // 2, y + thumb_height + 8), label, fill="white", font=sheet_font)
-        sheet.save(SHEET_DIR / f"sheet-{sheet_index:02d}.jpg", quality=88, optimize=True)
+        sheet.save(sheet_dir / f"sheet-{sheet_index:02d}.jpg", quality=88, optimize=True)
 
     report = {
-        "pdf": str(PDF),
+        "pdf": str(pdf),
         "pages": document.page_count,
         "render_scale": 1.6,
         "findings": findings,
-        "contact_sheets": len(list(SHEET_DIR.glob("sheet-*.jpg"))),
+        "contact_sheets": len(list(sheet_dir.glob("sheet-*.jpg"))),
     }
-    (ROOT / "report_qa" / "render-summary.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    summary.parent.mkdir(parents=True, exist_ok=True)
+    summary.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))
 
 
