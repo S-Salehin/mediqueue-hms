@@ -22,8 +22,9 @@ x-app-environment: &app-environment
   SESSION_IDLE_TIMEOUT_SECONDS: "1800"
   SESSION_ABSOLUTE_TIMEOUT_SECONDS: "28800"
   GROQ_API_KEY: ""
-  GROQ_MODEL: llama-3.3-70b-versatile
+  GROQ_MODEL: openai/gpt-oss-120b
   GROQ_TIMEOUT_SECONDS: "2"
+  GROQ_REASONING_EFFORT: low
 
 x-service-defaults: &service-defaults
   init: true
