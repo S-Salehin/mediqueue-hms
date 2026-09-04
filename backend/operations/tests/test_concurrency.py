@@ -2,6 +2,7 @@ import threading
 import uuid
 from datetime import datetime, time, timedelta
 from types import SimpleNamespace
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from django.db import close_old_connections, connection
@@ -19,6 +20,10 @@ class PostgreSQLConcurrencyTests(TransactionTestCase):
     reset_sequences = True
 
     def setUp(self):
+        self.fixed_now = datetime(2026, 8, 14, 2, 0, tzinfo=ZoneInfo("UTC"))
+        self.timezone_now_patcher = patch("django.utils.timezone.now", return_value=self.fixed_now)
+        self.timezone_now_patcher.start()
+        self.addCleanup(self.timezone_now_patcher.stop)
         self.hospital = Hospital.objects.create(display_name="Concurrency Test Hospital", short_name="CTH", timezone="Asia/Dhaka")
         self.department = Department.objects.create(hospital=self.hospital, name="General Medicine")
         self.location = Location.objects.create(hospital=self.hospital, name="Main", address="Synthetic")

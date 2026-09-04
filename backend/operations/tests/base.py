@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime, time
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from django.core.cache import cache
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 
 from accounts.models import RoleAssignment, User
@@ -11,11 +12,21 @@ from directory.models import Chamber, Department, DoctorProfile, Hospital, Locat
 from operations.models import Schedule
 
 
+# An operator environment can hold a real assistant provider key. Tests must never reach an external
+# network, so the provider stays disabled unless a test opts in with its own override.
+@override_settings(GROQ_API_KEY="")
 class HospitalTestCase(TestCase):
     password = "StrongPatient!2026"
 
     def setUp(self):
         super().setUp()
+        # Appointment tests must not become date dependent when the calendar moves past
+        # their 09:00 synthetic slot. Freezing the suite also makes local and CI evidence
+        # reproducible in every timezone and at every hour of the day.
+        self.fixed_now = datetime(2026, 8, 14, 2, 0, tzinfo=ZoneInfo("UTC"))
+        self.timezone_now_patcher = patch("django.utils.timezone.now", return_value=self.fixed_now)
+        self.timezone_now_patcher.start()
+        self.addCleanup(self.timezone_now_patcher.stop)
         cache.clear()
         self.hospital = Hospital.objects.create(
             display_name="Test Community Hospital",

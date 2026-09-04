@@ -264,3 +264,86 @@ class AssistantAPITests(HospitalTestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
+
+    @override_settings(GROQ_API_KEY="synthetic-key", GROQ_USER_AGENT="MediQueue-HelpAssistant/test", GROQ_REASONING_EFFORT="low")
+    def test_provider_request_identifies_the_client_and_bounds_reasoning(self):
+        """The provider edge rejects the default urllib agent and reasoning models need a bounded effort."""
+
+        class SyntheticResponse(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                self.close()
+
+        provider_body = json.dumps({"choices": [{"message": {"content": "Open Privacy choices."}}]}).encode()
+        with patch("help_assistant.services.request.urlopen", return_value=SyntheticResponse(provider_body)) as provider:
+            answer_question(self.patient_user, "Where are privacy choices?")
+        sent_request = provider.call_args.args[0]
+        self.assertEqual(sent_request.get_header("User-agent"), "MediQueue-HelpAssistant/test")
+        self.assertEqual(sent_request.get_header("Accept"), "application/json")
+        self.assertEqual(json.loads(sent_request.data)["reasoning_effort"], "low")
+
+    @override_settings(GROQ_API_KEY="synthetic-key")
+    def test_provider_markdown_is_reduced_to_plain_text(self):
+        """The assistant panel renders plain text, so markdown syntax must never reach the patient."""
+
+        class SyntheticResponse(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                self.close()
+
+        decorated = "## Getting started\n\n**Bold step** and *stress* and `code`\n\n* First\n* Second"
+        provider_body = json.dumps({"choices": [{"message": {"content": decorated}}]}).encode()
+        with patch("help_assistant.services.request.urlopen", return_value=SyntheticResponse(provider_body)):
+            result = answer_question(self.patient_user, "Where are privacy choices?")
+        answer = result["answer"]
+        self.assertEqual(result["provider"], "groq")
+        self.assertNotIn("*", answer)
+        self.assertNotIn("#", answer)
+        self.assertNotIn("`", answer)
+        self.assertIn("Getting started", answer)
+        self.assertIn("Bold step", answer)
+        self.assertIn("- First", answer)
+
+    @override_settings(GROQ_API_KEY="synthetic-key")
+    def test_provider_typography_matches_the_project_writing_style(self):
+        """The product writes plain punctuation, so decorative dashes and quotes are normalised."""
+
+        class SyntheticResponse(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                self.close()
+
+        decorated = "Dr\u202fFarhana\u2011Rahman \u2013 Cardiology \u2014 see the Women\u2019s Health desk\u2026"
+        provider_body = json.dumps({"choices": [{"message": {"content": decorated}}]}).encode()
+        with patch("help_assistant.services.request.urlopen", return_value=SyntheticResponse(provider_body)):
+            result = answer_question(self.patient_user, "Where are privacy choices?")
+        answer = result["answer"]
+        self.assertEqual(result["provider"], "groq")
+        self.assertTrue(all(ord(character) < 128 for character in answer), answer)
+        for decorative in ("\u2014", "\u2013", "\u2011", "\u2019", "\u202f", "\u2026"):
+            self.assertNotIn(decorative, answer)
+        self.assertIn("Dr Farhana-Rahman - Cardiology", answer)
+        self.assertIn("Women's Health", answer)
+
+    @override_settings(GROQ_API_KEY="synthetic-key")
+    def test_provider_empty_content_falls_back_to_local_answer(self):
+        """A reasoning model can spend its whole budget and return no content."""
+
+        class SyntheticResponse(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                self.close()
+
+        provider_body = json.dumps({"choices": [{"message": {"content": "", "reasoning": "hidden"}}]}).encode()
+        with patch("help_assistant.services.request.urlopen", return_value=SyntheticResponse(provider_body)):
+            result = answer_question(self.patient_user, "Where are privacy choices?")
+        self.assertEqual(result["provider"], "local")
+        self.assertTrue(result["answer"])

@@ -51,7 +51,7 @@ Work continues in parallel where tasks do not mutate the same files or test data
 
 ### 3.4 Current execution record
 
-On 26 August 2026, the complete local candidate passed 113 Django tests on PostgreSQL 18 with 87 percent coverage, 55 frontend tests with 88.88 percent line coverage, six Chromium role workflows, every role navigation destination, same origin health checks, and the 50 user quick read gate. The load gate completed 3,638 requests with no failed check and a 4.23 millisecond read p95. The encrypted backup and clean isolated restore also passed. Repository CI must repeat the final working tree after the SQA changes. External staging, hospital UAT, production SMTP, approved infrastructure, and the real data approvals remain separate gates and must not be described as complete until their named owners provide evidence.
+On 4 September 2026, the complete local candidate passed 129 Django tests on PostgreSQL 18.6 with 87 percent coverage, 57 frontend tests with 88.88 percent line coverage, six Chromium role workflows, every role navigation destination, same origin health checks, and the 50 user quick read gate. The load gate completed 3,638 requests with no failed check and a 4.23 millisecond read p95. The encrypted backup and clean isolated restore also passed. Repository CI must repeat the final working tree after the report and provider compatibility changes. External staging, hospital UAT, production SMTP, approved infrastructure, and the real data approvals remain separate gates and must not be described as complete until their named owners provide evidence.
 
 ## 4. Foundation work package
 

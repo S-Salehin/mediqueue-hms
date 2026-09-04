@@ -6,6 +6,8 @@
 /WhatsApp Image 2026-08-10 at 2.13.04 AM (1).jpeg
 /WhatsApp Image 2026-08-10 at 2.13.04 AM (2).jpeg
 /WhatsApp Image 2026-08-10 at 2.13.04 AM (3).jpeg
+/FYDP Tamplate.docx
+/Updated FYDP Tamplate for \[Summer 2025\].docx
 
 # Local secrets and credentials
 .env
@@ -50,6 +52,8 @@ test-results/
 /staticfiles/
 /backups/
 /reports/
+/report_qa/
+/deliverables/.report_build/
 /postgres-data/
 
 # Local editor and operating system files

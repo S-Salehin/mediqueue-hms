@@ -298,7 +298,8 @@ class QueueServiceTests(HospitalTestCase):
             transition_ticket(self.request_for(self.doctor_user), ticket.pk, "defer", "")
         transition_ticket(self.request_for(self.doctor_user), ticket.pk, "defer", "Patient asked for a short delay", "patient_request")
         original_wait = ticket.effective_waiting_at
-        restored = transition_ticket(self.request_for(self.doctor_user), ticket.pk, "restore", "Patient returned", "returned")
+        with patch("operations.services.timezone.now", return_value=self.fixed_now + timedelta(minutes=1)):
+            restored = transition_ticket(self.request_for(self.doctor_user), ticket.pk, "restore", "Patient returned", "returned")
         self.assertEqual(restored.state, QueueTicket.State.WAITING)
         self.assertGreater(restored.effective_waiting_at, original_wait)
 

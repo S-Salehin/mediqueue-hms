@@ -63,19 +63,22 @@ The assistant cannot complete a booking, cancel an appointment, check in a patie
 
 ## Groq integration
 
-The integration uses Groq’s OpenAI compatible chat completions endpoint at `https://api.groq.com/openai/v1/chat/completions`. The default model is the production model `llama-3.3-70b-versatile`. The model name is configurable because provider availability can change.
+The integration uses Groq’s OpenAI compatible chat completions endpoint at `https://api.groq.com/openai/v1/chat/completions`. The default model is `openai/gpt-oss-120b`. The model name is configurable because provider availability can change. Reasoning effort defaults to `low` so a reasoning capable model retains enough of the bounded completion budget to return a visible answer.
 
-Configuration uses three environment values.
+Configuration uses four environment values.
 
 ```text
 GROQ_API_KEY=
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MODEL=openai/gpt-oss-120b
 GROQ_TIMEOUT_SECONDS=8
+GROQ_REASONING_EFFORT=low
 ```
 
 An empty key is valid and enables local answers only. The timeout is bounded from 2 to 20 seconds. A provider timeout, network failure, malformed response, or unavailable model returns a local answer instead of failing the hospital workflow.
 
 To create a key, sign in at `https://console.groq.com/keys`, create a project key, and copy it once into the ignored local `.env` file. Do not paste the key into source code, a document, an issue, a screenshot, GitHub, or chat. Restart the API container after changing the environment.
+
+A key that has been pasted into chat or another shared channel must be treated as exposed. Revoke it in the Groq console and create a replacement. Only the replacement should be written directly to the ignored local environment file by the authorised operator.
 
 For local development:
 

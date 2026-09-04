@@ -158,8 +158,12 @@ PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:5173")
 APP_VERSION = os.environ.get("APP_VERSION", "development")
 OUTBOX_POLL_SECONDS = int(os.environ.get("OUTBOX_POLL_SECONDS", "5"))
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b").strip()
 GROQ_TIMEOUT_SECONDS = max(2, min(20, int(os.environ.get("GROQ_TIMEOUT_SECONDS", "8"))))
+# Groq sits behind an edge filter that rejects the default urllib agent, so the client identifies itself.
+GROQ_USER_AGENT = os.environ.get("GROQ_USER_AGENT", f"MediQueue-HelpAssistant/{APP_VERSION}").strip()
+# Reasoning models spend the completion budget on hidden reasoning unless the effort is bounded.
+GROQ_REASONING_EFFORT = os.environ.get("GROQ_REASONING_EFFORT", "low").strip()
 MFA_ENCRYPTION_KEY = os.environ.get("MFA_ENCRYPTION_KEY", "")
 if not DEBUG and not MFA_ENCRYPTION_KEY:
     raise RuntimeError("MFA_ENCRYPTION_KEY is required when DJANGO_DEBUG is false")
