@@ -265,6 +265,13 @@ Validation, conflict, permission, authentication, rate limit, and server errors 
 16. `GET /api/v1/dashboards/{role}/` returns one role specific summary and rejects a role not active in the current session.
 17. `GET /api/v1/health/live/` reports process liveness without dependencies or sensitive details.
 18. `GET /api/v1/health/ready/` reports whether the process can safely accept traffic.
+19. `POST /api/v1/assistant/chat/` returns role scoped workflow guidance and live operational answers. Staff access requires completed MFA. The request accepts one question and up to six bounded prior turns. The response identifies freshness, sources, safe route links, and whether Groq or the local answer path was used.
+
+## Role aware help assistant
+
+The assistant uses the existing permission and scheduling services instead of a second data path. Patient specific questions are answered locally from the signed in patient queryset. Doctor pressure uses only the linked doctor profile. Reception and administration receive nonidentifying aggregates. Public doctor availability uses the same capacity calculation as booking.
+
+Groq is optional and provides language generation only. It receives the approved system guide plus privacy safe live facts. It has no database credentials, application tools, write endpoint, or ability to execute an action. Clinical and private questions stay local. Failure returns a deterministic answer. Full controls are defined in `chatbot.md`.
 
 ## 8. State transitions
 

@@ -25,6 +25,42 @@ DEPARTMENTS = [
     "Women's Health",
 ]
 
+DOCTOR_NAMES = [
+    "Dr Farhana Rahman",
+    "Dr Tanvir Ahmed",
+    "Dr Nusrat Jahan",
+    "Dr Mahmudul Hasan",
+    "Dr Sadia Karim",
+    "Dr Arif Hossain",
+    "Dr Samira Chowdhury",
+    "Dr Rezaul Islam",
+    "Dr Tahmina Akter",
+    "Dr Imran Kabir",
+    "Dr Sharmin Sultana",
+    "Dr Faisal Mahmud",
+    "Dr Nabila Haque",
+    "Dr Saiful Alam",
+    "Dr Mehjabin Noor",
+    "Dr Rashedul Amin",
+    "Dr Tasnim Bari",
+    "Dr Shafiqur Rahman",
+    "Dr Anika Ferdous",
+    "Dr Zubair Hasan",
+    "Dr Jannatul Mawa",
+    "Dr Ashikur Rahman",
+    "Dr Sanjida Islam",
+    "Dr Omar Faruk",
+    "Dr Rukaiya Sultana",
+    "Dr Nafis Ahmed",
+    "Dr Tanjina Haque",
+    "Dr Moinul Kabir",
+    "Dr Israt Jahan",
+    "Dr Shahriar Alam",
+]
+
+PATIENT_FIRST_NAMES = ["Ayesha", "Nusrat", "Sadia", "Farzana", "Tahmina", "Samira", "Mehjabin", "Rafi", "Tanvir", "Mahmud"]
+PATIENT_LAST_NAMES = ["Rahman", "Ahmed", "Jahan", "Hasan", "Karim", "Hossain", "Chowdhury", "Islam", "Akter", "Kabir"]
+
 
 class Command(BaseCommand):
     help = "Create a deterministic, unmistakably synthetic development dataset."
@@ -73,7 +109,7 @@ class Command(BaseCommand):
             user = User.objects.create_user(
                 f"doctor{index:02d}@example.test",
                 "SyntheticOnly!2026",
-                display_name=f"Dr Synthetic {index:02d}",
+                display_name=DOCTOR_NAMES[index - 1],
                 email_verified_at=timezone.now(),
                 is_staff=True,
             )
@@ -122,7 +158,7 @@ class Command(BaseCommand):
         for index in range(1, max(options["appointments"], 100) + 1):
             patient = PatientProfile.objects.create(
                 hospital=hospital,
-                full_name=f"Synthetic Patient {index:04d}",
+                full_name=f"{PATIENT_FIRST_NAMES[(index - 1) % 10]} {PATIENT_LAST_NAMES[(index - 1) // 10 % 10]}",
                 email=f"patient{index:04d}@example.test",
                 phone=f"+88018{index:08d}",
                 date_of_birth=timezone.localdate().replace(year=1980 + index % 35),
@@ -140,8 +176,8 @@ class Command(BaseCommand):
         patients[0].is_claimed = True
         patients[0].save(update_fields=["user", "email", "is_claimed", "updated_at"])
         staff_accounts = [
-            ("reception.demo@example.test", "Synthetic Receptionist", RoleAssignment.Role.RECEPTIONIST, "KRSXG5DSNFXGOIDB"),
-            ("admin.demo@example.test", "Synthetic Administrator", RoleAssignment.Role.ADMINISTRATOR, "MFRGGZDFMZTWQ2LK"),
+            ("reception.demo@example.test", "Shamima Sultana", RoleAssignment.Role.RECEPTIONIST, "KRSXG5DSNFXGOIDB"),
+            ("admin.demo@example.test", "Arif Hossain", RoleAssignment.Role.ADMINISTRATOR, "MFRGGZDFMZTWQ2LK"),
         ]
         staff_by_role = {}
         for email, name, role, secret in staff_accounts:

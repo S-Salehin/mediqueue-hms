@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "directory",
     "operations",
     "communications",
+    "help_assistant",
 ]
 
 MIDDLEWARE = [
@@ -141,7 +142,7 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "core.exceptions.api_exception_handler",
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_THROTTLE_CLASSES": ["core.throttling.DatabaseScopedRateThrottle"],
-    "DEFAULT_THROTTLE_RATES": {"auth": "60/min", "public": "1800/min", "write": "120/min"},
+    "DEFAULT_THROTTLE_RATES": {"auth": "60/min", "public": "1800/min", "write": "120/min", "assistant": "20/min"},
 }
 
 EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
@@ -156,6 +157,9 @@ PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:5173")
 
 APP_VERSION = os.environ.get("APP_VERSION", "development")
 OUTBOX_POLL_SECONDS = int(os.environ.get("OUTBOX_POLL_SECONDS", "5"))
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+GROQ_TIMEOUT_SECONDS = max(2, min(20, int(os.environ.get("GROQ_TIMEOUT_SECONDS", "8"))))
 MFA_ENCRYPTION_KEY = os.environ.get("MFA_ENCRYPTION_KEY", "")
 if not DEBUG and not MFA_ENCRYPTION_KEY:
     raise RuntimeError("MFA_ENCRYPTION_KEY is required when DJANGO_DEBUG is false")

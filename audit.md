@@ -256,6 +256,7 @@ The rating is the risk before implementation evidence. Every control below is re
 | R16 | The hospital launches without valid privacy, retention, consent, vendor, or incident decisions. | Critical | Qualified legal review, hospital approvals, processing inventory, signed launch record, and no production data before approval. | Open, blocks real data |
 | R17 | Excessive administrator access or direct database edits bypass the audit trail. | High | Purpose limited admin UI, append only audit events, no ordinary database access, emergency change procedure, and periodic access review. | Open, blocks real data |
 | R18 | Sequential scraping or automated requests enumerate doctors, accounts, or availability and degrade service. | Medium | UUID external identifiers, generic account responses, rate limits, pagination, request monitoring, and load tests. | Open, pilot monitored |
+| R19 | A chatbot leaks a patient record to another role, sends private data to an external model, hallucinates availability, gives clinical advice, or becomes a hidden write path. | Critical | Server derived role, local private queries, public or aggregate provider context, identifier filtering, clinical refusal, read only API, source and freshness labels, bounded history, rate limit, provider timeout, local fallback, and cross role tests. | Open, blocks real data |
 
 Detailed defect ownership and status belong in `bugs.md`. Security incidents follow `production.md` even when the triggering defect began as a normal bug.
 
@@ -276,6 +277,7 @@ Detailed defect ownership and status belong in `bugs.md`. Security incidents fol
 13. Corrections and deactivation instead of silent deletion. Business state and audit history remain traceable.
 14. MediQueue remains a development name until the hospital approves a production identity and trademark review.
 15. Synthetic data only until every real data gate is signed.
+16. The help assistant is read only and remains functional without Groq. Groq is disabled for real data until the hospital and privacy reviewer approve the external processor relationship.
 
 ## 13. Go live gaps
 

@@ -291,4 +291,16 @@ If the pilot must stop, reception returns to the approved downtime workflow. Exi
 
 The final acceptance record must identify the release, environment, approvers, evidence links, approved exceptions, pilot boundary, support period, and next review date. Signoff is required from the technical owner, hospital operational owner, doctor representative, receptionist representative, privacy or legal reviewer, and deployment operator.
 
+## Help assistant operations
+
+The assistant is designed to remain useful without an external language provider. `GROQ_API_KEY` may be empty. When it is empty or Groq is unavailable, controlled local answers and live database calculations continue normally.
+
+If Groq is enabled, its key is an application secret stored only in the protected environment file. It must be rotated after suspected exposure and must never appear in logs, screenshots, support records, source code, or deployment output. Provider failures are logged by error class only. Prompt text is not logged.
+
+Real patient use of Groq requires written approval of the provider relationship by the hospital and privacy reviewer. The review must cover purpose, data fields, geographic processing, retention, training use, subcontractors, access, incident notification, deletion, contract terms, and the method used to disable the integration. Until that review is accepted, production keeps `GROQ_API_KEY` empty.
+
+The protected production environment records this decision as `GROQ_PROCESSOR_APPROVED`. Deployment validation rejects a configured Groq key when real data is approved but the processor decision remains false.
+
+Monitoring records assistant request rate, local fallback rate, provider availability, response latency, and refusal checks without retaining question text. An assistant outage never blocks authentication, appointments, check in, queue operation, payment recording, notifications, or administration.
+
 An exception must name its risk, temporary control, owner, deadline, and approval. Critical security, privacy, integrity, backup, or access control gates cannot be waived for real data launch.

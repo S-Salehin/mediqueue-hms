@@ -387,4 +387,12 @@ See the complete evidence list in [production.md](production.md) and the scenari
 
 Work uses short lived branches and reviewed pull requests. The pull request must explain user behaviour, privacy and authorization effects, database changes, tests, and rollback. Use synthetic records in fixtures, screenshots, logs, and issue reports.
 
+## Help assistant
+
+Every authenticated workspace includes a role aware help assistant. It answers system usage questions and selected live operational questions without changing records. Private patient answers are produced inside Django. Groq receives only privacy safe questions and public or nonidentifying context when it is configured.
+
+Create a Groq key at `https://console.groq.com/keys`, then place it in the ignored local `.env` file as `GROQ_API_KEY`. Never send the key through chat or commit it. Restart the API container after changing the environment. The assistant keeps working with local answers when the key is empty.
+
+The complete behaviour, role boundary, API contract, safety rules, and production approval requirement are documented in `chatbot.md`.
+
 This is a private project. No public open source licence is granted. Hospital ownership, university submission rights, contributor agreements, and third party asset rights must be confirmed before any distribution outside the approved team.

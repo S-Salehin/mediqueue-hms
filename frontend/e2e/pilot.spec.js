@@ -120,7 +120,7 @@ test.describe.serial('production pilot browser flows', () => {
     await signIn(page, 'patient.demo@example.test')
     await page.goto('/patient/appointments/new')
     await expect(page.getByRole('heading', { name: 'Book an appointment' })).toBeVisible()
-    await page.getByText('Dr Synthetic 01', { exact: true }).click()
+    await page.getByText('Dr Farhana Rahman', { exact: true }).click()
     await page.getByRole('button', { name: /Continue/ }).click()
 
     const date = page.getByLabel('Appointment date')
@@ -132,6 +132,16 @@ test.describe.serial('production pilot browser flows', () => {
       page.getByRole('radiogroup', { name: 'Available appointment times' }),
     ).toBeVisible()
     await expect(page.getByRole('radio').first()).toBeEnabled()
+    await page.getByRole('button', { name: 'Open help assistant' }).click()
+    await page
+      .getByLabel('Ask about this hospital system')
+      .fill('Which doctors have an available slot?')
+    await page.getByRole('button', { name: 'Send question' }).click()
+    await expect(page.getByText('Live hospital data')).toBeVisible()
+    await expect(page.locator('.assistant-message.assistant').last()).toContainText(
+      'Dr Farhana Rahman',
+    )
+    await page.getByRole('button', { name: 'Close help assistant' }).last().click()
     await verifyWorkspaceNavigation(page, 'patient navigation', [
       ['/patient', 'Overview'],
       ['/patient/appointments', 'Appointments'],
@@ -145,10 +155,10 @@ test.describe.serial('production pilot browser flows', () => {
     await signIn(page, 'reception.demo@example.test', 'KRSXG5DSNFXGOIDB')
     await expect(page.getByRole('heading', { name: 'Today at reception' })).toBeVisible()
     await page.getByRole('link', { name: 'Appointments', exact: true }).click()
-    await page.getByLabel('Find appointment').fill('Synthetic Patient 0001')
+    await page.getByLabel('Find appointment').fill('Ayesha Rahman')
     await page.getByRole('button', { name: 'Search', exact: true }).click()
 
-    const row = page.getByRole('row', { name: /Synthetic Patient 0001/ })
+    const row = page.getByRole('row', { name: /Ayesha Rahman/ })
     await expect(row).toBeVisible()
     await row.getByRole('button', { name: 'Check in' }).click()
     await expect(page.getByText(/Checked in\. Queue token/)).toBeVisible()
@@ -164,7 +174,7 @@ test.describe.serial('production pilot browser flows', () => {
   test('patient sees only a token and non-sensitive location guidance', async ({ page }) => {
     await signIn(page, 'patient.demo@example.test')
     await page.goto('/patient/appointments')
-    await page.getByRole('link', { name: /View appointment with Dr Synthetic 01/ }).click()
+    await page.getByRole('link', { name: /View appointment with Dr Farhana Rahman/ }).click()
     const snapshotResponse = page.waitForResponse(
       (response) => response.url().includes('/queues/') && response.url().endsWith('/snapshot/'),
     )
@@ -173,11 +183,11 @@ test.describe.serial('production pilot browser flows', () => {
 
     await expect(page.getByRole('heading', { name: 'Your visit progress' })).toBeVisible()
     await expect(page.getByText('Where to go')).toBeVisible()
-    await expect(page.getByText(/Dr Synthetic 01.*Main Building.*Chamber 01/)).toBeVisible()
+    await expect(page.getByText(/Dr Farhana Rahman.*Main Building.*Chamber 01/)).toBeVisible()
     expect(JSON.stringify(snapshot)).not.toMatch(
       /patient_name|full_name|date_of_birth|phone|email/i,
     )
-    await expect(page.getByText('Synthetic Patient 0002')).toHaveCount(0)
+    await expect(page.getByText('Nusrat Rahman')).toHaveCount(0)
   })
 
   test('assigned doctor completes MFA and opens the operational queue', async ({ page }) => {

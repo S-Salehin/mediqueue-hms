@@ -55,6 +55,8 @@ BACKUP_RETENTION_DAYS="$(read_env_value BACKUP_RETENTION_DAYS "${ENV_FILE}")"
 SESSION_IDLE_TIMEOUT_SECONDS="$(read_env_value SESSION_IDLE_TIMEOUT_SECONDS "${ENV_FILE}")"
 SESSION_ABSOLUTE_TIMEOUT_SECONDS="$(read_env_value SESSION_ABSOLUTE_TIMEOUT_SECONDS "${ENV_FILE}")"
 GHCR_TOKEN="$(read_env_value GHCR_TOKEN "${ENV_FILE}")"
+GROQ_API_KEY="$(read_env_value GROQ_API_KEY "${ENV_FILE}")"
+GROQ_PROCESSOR_APPROVED="$(read_env_value GROQ_PROCESSOR_APPROVED "${ENV_FILE}")"
 REAL_DATA_APPROVED="$(read_env_value REAL_DATA_APPROVED "${ENV_FILE}")"
 OFF_HOST_BACKUP_APPROVED="$(read_env_value OFF_HOST_BACKUP_APPROVED "${ENV_FILE}")"
 
@@ -149,6 +151,11 @@ unset MEDIQUEUE_VALIDATE_DATABASE_URL MEDIQUEUE_VALIDATE_DATABASE_USER \
 (( ${#BACKUP_ENCRYPTION_PASSPHRASE} >= 32 )) || die 'BACKUP_ENCRYPTION_PASSPHRASE must contain at least 32 characters.'
 SECRET_LABELS=(DJANGO_SECRET_KEY MFA_ENCRYPTION_KEY POSTGRES_PASSWORD MEDIQUEUE_MIGRATION_PASSWORD MEDIQUEUE_APP_PASSWORD SMTP_PASSWORD BACKUP_ENCRYPTION_PASSPHRASE GHCR_TOKEN)
 SECRET_VALUES=("${DJANGO_SECRET_KEY}" "${MFA_ENCRYPTION_KEY}" "${POSTGRES_PASSWORD}" "${MEDIQUEUE_MIGRATION_PASSWORD}" "${MEDIQUEUE_APP_PASSWORD}" "${SMTP_PASSWORD}" "${BACKUP_ENCRYPTION_PASSPHRASE}" "${GHCR_TOKEN}")
+if [[ -n "${GROQ_API_KEY}" ]]; then
+    (( ${#GROQ_API_KEY} >= 20 )) || die 'GROQ_API_KEY must contain at least 20 characters when configured.'
+    SECRET_LABELS+=(GROQ_API_KEY)
+    SECRET_VALUES+=("${GROQ_API_KEY}")
+fi
 for ((left = 0; left < ${#SECRET_VALUES[@]}; left += 1)); do
     for ((right = left + 1; right < ${#SECRET_VALUES[@]}; right += 1)); do
         [[ "${SECRET_VALUES[left]}" != "${SECRET_VALUES[right]}" ]] \
@@ -170,9 +177,15 @@ done
     || die 'REAL_DATA_APPROVED must be true or false.'
 [[ "${OFF_HOST_BACKUP_APPROVED}" == 'true' || "${OFF_HOST_BACKUP_APPROVED}" == 'false' ]] \
     || die 'OFF_HOST_BACKUP_APPROVED must be true or false.'
+[[ "${GROQ_PROCESSOR_APPROVED}" == 'true' || "${GROQ_PROCESSOR_APPROVED}" == 'false' ]] \
+    || die 'GROQ_PROCESSOR_APPROVED must be true or false.'
 
 if [[ "${REAL_DATA_APPROVED}" == 'true' && "${OFF_HOST_BACKUP_APPROVED}" != 'true' ]]; then
     die 'Real data approval requires approved off-host backup replication.'
+fi
+
+if [[ "${REAL_DATA_APPROVED}" == 'true' && -n "${GROQ_API_KEY}" && "${GROQ_PROCESSOR_APPROVED}" != 'true' ]]; then
+    die 'Groq must remain disabled for real data until GROQ_PROCESSOR_APPROVED is true.'
 fi
 
 if [[ "${ENVIRONMENT}" == 'production' && "${REAL_DATA_APPROVED}" == 'true' ]]; then

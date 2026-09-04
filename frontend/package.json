@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "report:screenshots": "node scripts/capture-report.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {

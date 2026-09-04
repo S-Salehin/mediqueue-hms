@@ -453,3 +453,37 @@ The following work is outside the current pilot and must not be added by weakeni
 ## 13. Release completion definition
 
 The three day completion plan is complete when the tagged production candidate passes all required tests, hospital UAT is signed for the tested revision, staging is healthy, the backup and rollback evidence is current, all release blocking defects are closed, and the release record states clearly whether the real data gates remain pending.
+
+## 14. Role aware help assistant work package
+
+### 14.1 Implement secure assistant API
+
+Priority: 0
+Owner: Backend owner
+Dependencies: Authentication, role permissions, directory, appointments, schedules, queues, and payments
+Work: Add a bounded authenticated assistant endpoint, role derived access, controlled live queries, clinical refusal, identifier filtering, Groq timeout, and local fallback.
+Acceptance: Private answers stay local, no answer can change a record, staff MFA is enforced, and automated API tests pass.
+
+### 14.2 Add assistant interface
+
+Priority: 0
+Owner: Frontend owner
+Dependencies: Task 14.1
+Work: Add an accessible assistant panel to all four authenticated workspaces with role specific suggestions, live data labels, sources, safe route links, loading, failure, keyboard, and mobile states.
+Acceptance: Component tests and the assembled browser flow pass without a page exception, console error, server error, or blocked navigation.
+
+### 14.3 Prepare report evidence
+
+Priority: 0
+Owner: Delivery lead
+Dependencies: Tasks 14.1 and 14.2
+Work: Seed only synthetic Bangladeshi names, perform representative demo actions, and capture the public, patient, reception, doctor, administration, queue, and assistant screens in `report_assets/screenshots`.
+Acceptance: The manifest identifies every image and no screenshot contains a secret, MFA value, session value, API key, or real patient information.
+
+### 14.4 Approve any external language provider
+
+Priority: 0 for real data
+Owner: Hospital administrator and privacy reviewer
+Dependencies: Vendor terms and legal review
+Work: Review Groq processing purpose, fields, location, retention, training use, access, subprocessors, incident terms, and deletion.
+Acceptance: The approval is written and linked to the release record. Until then `GROQ_API_KEY` remains empty in every environment that can receive real patient data.
