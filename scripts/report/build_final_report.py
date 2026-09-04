@@ -195,6 +195,7 @@ def style_document(document: Document) -> None:
         style.paragraph_format.space_before = Pt(before)
         style.paragraph_format.space_after = Pt(after)
         style.paragraph_format.keep_with_next = True
+        style.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
     for name in ("Figure Caption", "Table Caption", "Source Note", "Code Block", "Preliminary Heading", "Front Matter Heading"):
         if name not in document.styles:
@@ -331,8 +332,10 @@ def add_bullets(document: Document, items: list[str]) -> None:
         apply_numbering(paragraph, num_id)
 
 
-def add_heading(document: Document, text: str, level: int = 1) -> None:
+def add_heading(document: Document, text: str, level: int = 1, *, page_break_before: bool = False) -> None:
     paragraph = document.add_heading(text, level=level)
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    paragraph.paragraph_format.page_break_before = page_break_before
     keep_with_next(paragraph)
 
 
@@ -417,6 +420,151 @@ def add_table(document: Document, number: str, title: str, headers: list[str], r
     document.add_paragraph()
 
 
+def add_task_allocation_timeline(document: Document, number: str) -> None:
+    """Add the editable two-row planned/actual timeline required by the FYDP template."""
+    caption = document.add_paragraph(style="Table Caption")
+    caption.add_run(f"Table {number}: Task allocation and project timeline.")
+
+    weeks = list(range(12, 50, 2))
+    task_width = 1.84
+    week_width = (6.20 - task_width) / len(weeks)
+    widths = [task_width] + [week_width] * len(weeks)
+    table = document.add_table(rows=2, cols=20)
+    table.style = "Table Grid"
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.autofit = False
+
+    task_header = table.cell(0, 0).merge(table.cell(1, 0))
+    task_header.text = "Tasks"
+    weeks_header = table.cell(0, 1).merge(table.cell(0, 19))
+    weeks_header.text = "Weeks"
+    for index, value in enumerate(weeks, start=1):
+        table.cell(1, index).text = str(value)
+
+    schedule = [
+        ("Project analysis and requirements", (12, 20), (12, 18)),
+        ("Architecture and data design", (16, 24), (18, 26)),
+        ("Identity, roles and hospital directory", (20, 30), (22, 32)),
+        ("Scheduling and appointment workflow", (24, 34), (26, 36)),
+        ("Reception and queue operations", (30, 38), (32, 40)),
+        ("Assistant, audit and notifications", (34, 42), (36, 44)),
+        ("Security, testing and recovery", (38, 46), (40, 48)),
+        ("Report, UAT and deployment readiness", (42, 48), (44, 48)),
+    ]
+    planned_fill = "4D4BFF"
+    actual_fill = "4CF45B"
+    for task, planned, actual in schedule:
+        planned_row = table.add_row()
+        actual_row = table.add_row()
+        prevent_row_split(planned_row)
+        prevent_row_split(actual_row)
+        merged_task = planned_row.cells[0].merge(actual_row.cells[0])
+        merged_task.text = task
+        for column, week in enumerate(weeks, start=1):
+            if planned[0] <= week <= planned[1]:
+                set_cell_shading(planned_row.cells[column], planned_fill)
+            if actual[0] <= week <= actual[1]:
+                set_cell_shading(actual_row.cells[column], actual_fill)
+
+    target_width_twips = round(6.20 * 1440)
+    width_twips = [round(value * 1440) for value in widths]
+    width_twips[-1] += target_width_twips - sum(width_twips)
+    table_width = table._tbl.tblPr.find(qn("w:tblW"))
+    if table_width is None:
+        table_width = OxmlElement("w:tblW")
+        table._tbl.tblPr.insert(0, table_width)
+    table_width.set(qn("w:w"), str(sum(width_twips)))
+    table_width.set(qn("w:type"), "dxa")
+    grid = table._tbl.tblGrid
+    for child in list(grid):
+        grid.remove(child)
+    for value in width_twips:
+        grid_column = OxmlElement("w:gridCol")
+        grid_column.set(qn("w:w"), str(value))
+        grid.append(grid_column)
+
+    for row_index, row in enumerate(table.rows):
+        raw_cells = list(row._tr.tc_lst)
+        expected_widths = [width_twips[0], sum(width_twips[1:])] if row_index == 0 else width_twips
+        if len(raw_cells) != len(expected_widths):
+            raise ValueError(f"Unexpected task timeline geometry in row {row_index + 1}")
+        for raw_cell, value in zip(raw_cells, expected_widths):
+            tc_width = raw_cell.get_or_add_tcPr().find(qn("w:tcW"))
+            if tc_width is None:
+                tc_width = OxmlElement("w:tcW")
+                raw_cell.get_or_add_tcPr().append(tc_width)
+            tc_width.set(qn("w:w"), str(value))
+            tc_width.set(qn("w:type"), "dxa")
+
+    for row_index, row in enumerate(table.rows):
+        if row_index < 2:
+            repeat_header(row)
+        prevent_row_split(row)
+        for cell_index, cell in enumerate(row.cells):
+            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+            set_cell_margins(cell, top=20, start=18, bottom=20, end=18)
+            for paragraph in cell.paragraphs:
+                paragraph.paragraph_format.space_before = Pt(0)
+                paragraph.paragraph_format.space_after = Pt(0)
+                paragraph.paragraph_format.line_spacing = 1.0
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT if cell_index == 0 else WD_ALIGN_PARAGRAPH.CENTER
+                for run in paragraph.runs:
+                    run.font.name = "Century"
+                    run.font.size = Pt(7.2)
+                    run.font.color.rgb = RGBColor(0, 0, 0)
+                    if row_index == 0 or (row_index == 1 and cell_index == 0):
+                        run.font.bold = True
+
+    spacer = document.add_paragraph()
+    spacer.paragraph_format.space_before = Pt(0)
+    spacer.paragraph_format.space_after = Pt(0)
+    spacer.paragraph_format.line_spacing = 0.3
+    legend = document.add_table(rows=1, cols=4)
+    legend.style = "Table Grid"
+    legend.alignment = WD_TABLE_ALIGNMENT.CENTER
+    legend.autofit = False
+    repeat_header(legend.rows[0])
+    legend_labels = ["Estimated Work Period", "", "Actual Work Period", ""]
+    legend_widths = [1.82, 0.36, 1.66, 0.36]
+    legend_twips = [round(value * 1440) for value in legend_widths]
+    legend_table_width = legend._tbl.tblPr.find(qn("w:tblW"))
+    if legend_table_width is None:
+        legend_table_width = OxmlElement("w:tblW")
+        legend._tbl.tblPr.insert(0, legend_table_width)
+    legend_table_width.set(qn("w:w"), str(sum(legend_twips)))
+    legend_table_width.set(qn("w:type"), "dxa")
+    legend_grid = legend._tbl.tblGrid
+    for child in list(legend_grid):
+        legend_grid.remove(child)
+    for value in legend_twips:
+        grid_column = OxmlElement("w:gridCol")
+        grid_column.set(qn("w:w"), str(value))
+        legend_grid.append(grid_column)
+    for index, label in enumerate(legend_labels):
+        cell = legend.cell(0, index)
+        cell.text = label
+        cell.width = Inches(legend_widths[index])
+        tc_width = cell._tc.get_or_add_tcPr().find(qn("w:tcW"))
+        if tc_width is None:
+            tc_width = OxmlElement("w:tcW")
+            cell._tc.get_or_add_tcPr().append(tc_width)
+        tc_width.set(qn("w:w"), str(legend_twips[index]))
+        tc_width.set(qn("w:type"), "dxa")
+        set_cell_margins(cell, top=20, start=30, bottom=20, end=30)
+        if index == 1:
+            set_cell_shading(cell, planned_fill)
+        elif index == 3:
+            set_cell_shading(cell, actual_fill)
+        for paragraph in cell.paragraphs:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            paragraph.paragraph_format.space_after = Pt(0)
+            for run in paragraph.runs:
+                run.font.name = "Century"
+                run.font.size = Pt(8)
+                run.font.bold = True
+    document.add_paragraph()
+
+
 def add_figure(document: Document, number: str, title: str, path: Path, *, width=6.3,
                source: str | None = None) -> None:
     if not path.exists():
@@ -465,10 +613,9 @@ def new_section(document: Document, *, numbering: str, start: int) -> None:
 
 
 def chapter(document: Document, number: int, title: str, overview: str, *, start_on_new_page: bool = True) -> None:
-    if start_on_new_page:
-        page_break(document)
     paragraph = document.add_paragraph()
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    paragraph.paragraph_format.page_break_before = start_on_new_page
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
     paragraph.paragraph_format.space_before = Pt(20)
     run = paragraph.add_run(f"Chapter {number}")
     run.bold = True
@@ -476,7 +623,7 @@ def chapter(document: Document, number: int, title: str, overview: str, *, start
     run.font.size = Pt(18)
     run.font.color.rgb = RGBColor(0, 0, 0)
     heading = document.add_heading(title, level=1)
-    heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    heading.alignment = WD_ALIGN_PARAGRAPH.LEFT
     heading.paragraph_format.space_before = Pt(20)
     heading.paragraph_format.space_after = Pt(28)
     add_text(document, overview)
@@ -671,7 +818,13 @@ def chapter_one(document: Document) -> None:
         ],
     )
 
-    add_heading(document, "1.5 Research Questions", 2)
+    add_heading(document, "1.5 Methodology", 2)
+    add_text(
+        document,
+        "The project followed an iterative design and implementation method. Requirements from the supplied university material were traced to actors, permissions, records, state transitions, risks, interfaces, and test conditions. The system was then built as complete vertical workflows across React, the Django API, and PostgreSQL. Each workflow passed code review, automated checks, role based browser verification, and defect correction before the next workflow was accepted. Deployment, recovery, privacy, and real data approval were evaluated as part of the same method rather than as work left outside the software life cycle.",
+    )
+
+    add_heading(document, "1.6 Research Questions", 2)
     research_questions = [
         "RQ1. How can appointment capacity be protected when patients or staff submit repeated or competing booking requests?",
         "RQ2. How can scheduled patients and walk in patients enter one fair operational queue without revealing another patient's identity?",
@@ -682,7 +835,7 @@ def chapter_one(document: Document) -> None:
     for question in research_questions:
         add_text(document, question, bold_prefix=question.split(".")[0] + ".")
 
-    add_heading(document, "1.6 Scope of the Project", 2)
+    add_heading(document, "1.7 Scope of the Project", 2)
     add_text(
         document,
         "The first release is designed for one small hospital with up to 30 doctors, about 500 appointments in a day, and 50 concurrent users. It supports patient, doctor, receptionist, and administrator roles. Included functions are patient registration and account claiming, medical record number generation, departments, locations, chambers, doctor profiles, recurring schedules, closures, availability, appointment booking, rescheduling, cancellation, check in, walk ins, queue control, privacy safe patient tokens, adaptive waiting information, onsite payment recording in BDT, notifications, consent, administrative settings, operational reports, and audit evidence.",
@@ -692,7 +845,7 @@ def chapter_one(document: Document) -> None:
         "The release excludes electronic medical record notes, diagnoses, prescriptions, laboratory, pharmacy, radiology, inpatient care, bed management, insurance, inventory, payroll, online payments, SMS, video consultation, automated diagnosis, automated triage, and multi hospital tenancy. The development name MediQueue is configurable and must be replaced by the hospital's approved identity before public use. All demonstrations use synthetic records until the legal, organizational, and infrastructure gates are approved.",
     )
 
-    add_heading(document, "1.7 Expected Outcome", 2)
+    add_heading(document, "1.8 Project Outcome", 2)
     add_text(
         document,
         "The expected outcome is a complete web application that can demonstrate the outpatient journey from doctor discovery to appointment completion. A patient should be able to create an account, find a doctor, select real computed availability, book or change an appointment, and follow a private queue token. Reception should be able to identify patients, create walk ins, check patients in, and record onsite payment status. A doctor should be able to manage only the assigned queue. An administrator should be able to configure the service and review audit records.",
@@ -702,7 +855,7 @@ def chapter_one(document: Document) -> None:
         "The expected technical result is a same origin React and Django application backed by PostgreSQL, deployed through containers and a reverse proxy. The database must protect capacity and state under concurrency. Automated tests must cover roles, ownership, workflow transitions, idempotency, queue privacy, provider failure, accessibility, builds, container assembly, and restoration. External hospital acceptance and real patient launch approval remain separate from completion of the academic prototype.",
     )
 
-    add_heading(document, "1.8 Contribution of the Project", 2)
+    add_heading(document, "1.9 Contribution of the Project", 2)
     add_text(
         document,
         "The first contribution is an integrated operational model that joins schedule capacity, appointments, reception check in, queue tickets, payments, notifications, consent, and audit history without mixing their states. The second contribution is the Adaptive Arrival Window. It combines the configured consultation duration with the median of recent valid service durations, reports a range and confidence rather than an exact promise, and records manual overrides while preserving first in first out order.",
@@ -712,7 +865,7 @@ def chapter_one(document: Document) -> None:
         "The third contribution is a role aware, read only help assistant. It answers workflow questions and carefully selected live facts for the signed in role while refusing medical advice and write operations. A deterministic local answer path remains available when the optional language provider fails. The fourth contribution is the engineering evidence around the application: transactional services, stable API errors, immutable histories, staff MFA, security checks, reproducible containers, encrypted restoration, role walkthroughs, and explicit go live conditions.",
     )
 
-    add_heading(document, "1.9 Organization of the Report", 2)
+    add_heading(document, "1.10 Organization of the Report", 2)
     add_text(
         document,
         "Chapter 2 presents the hospital operations background, related research, comparable systems, feature comparison, and gap analysis. Chapter 3 explains the research methodology, requirements, system architecture, data design, workflow method, adaptive mechanism, assistant method, tools, and project allocation. Chapter 4 describes the implementation environment, implemented modules, interface evidence, software quality assurance, and measured results. Chapter 5 discusses engineering standards, design constraints, ethical and social responsibilities, sustainability, financial analysis, complex engineering problems, knowledge profiles, engineering activities, and risk. Chapter 6 summarises the work, reports the major findings, traces the objectives, explains limitations, identifies future work, and gives the final conclusion.",
@@ -881,11 +1034,13 @@ def chapter_three(document: Document) -> None:
         "Research Methodology",
         "This chapter presents the method used to analyse, design, implement, and verify the proposed Hospital Management System. The work followed an iterative design and engineering method in which requirements, access rules, database invariants, API behaviour, interface states, and tests were developed together.",
     )
-    add_heading(document, "3.1 Research Design and Overall Architecture", 2)
+    add_heading(document, "3.1 Requirement Analysis and Design Specification", 2)
+    add_heading(document, "3.1.1 Overview", 3)
     add_text(
         document,
         "The research uses a design and implementation methodology. First, the supplied university documents and interface references were examined to identify the intended actors and workflow. Second, the scope was limited to nonclinical outpatient operations. Third, each requirement was mapped to a role, data record, permission, state transition, failure condition, and verification method. The system was then implemented in short vertical increments and evaluated with automated and manual evidence.",
     )
+    add_heading(document, "3.1.2 Proposed System Design", 3)
     add_text(
         document,
         "The overall architecture has four functional layers. The presentation layer contains the public pages and the four role workspaces. The application layer contains the versioned Django REST API, authentication, authorization, validation, and domain services. The data layer contains PostgreSQL records, constraints, histories, audit events, idempotency results, and the notification outbox. The operations layer contains Caddy, containers, health checks, monitoring rules, backup, restoration, and release controls.",
@@ -997,7 +1152,7 @@ def chapter_three(document: Document) -> None:
         "Every externally addressable business record uses a UUID. Sequential database keys, where present internally, do not become object authority. Timestamps are stored in UTC and displayed in Asia/Dhaka. Money is stored as integer BDT minor units. Patients, doctors, schedules, and referenced configuration are deactivated or superseded rather than silently deleted. Restrictive foreign keys keep historical records from becoming detached.",
     )
 
-    add_heading(document, "3.3.3 Appointment and Queue State Design", 3)
+    add_heading(document, "3.3.3 Data Flow Diagram and Appointment Queue State Design", 3)
     add_figure(document, "3.4", "Appointment and queue workflow", DIAGRAM_DIR / "04_appointment_queue_workflow.png")
     add_text(
         document,
@@ -1098,7 +1253,7 @@ def chapter_three(document: Document) -> None:
     ]
     add_table(document, "3.7", "Design alternatives", ["Decision", "Alternative", "Selected", "Reason"], alternatives, widths=[1.1, 1.4, 1.45, 2.25], font_size=8)
 
-    add_heading(document, "3.7 Tools, Technologies, and Implementation Workflow", 2)
+    add_heading(document, "3.7 Tools and Technologies", 2)
     tools = [
         ["Frontend", "React, JavaScript, React Router, Vite, Tailwind CSS", "Role workspaces, responsive interaction, forms, queue polling, and assistant panel"],
         ["Backend", "Python, Django 5.2 LTS, Django REST Framework", "Authentication, authorization, API validation, domain services, audit, and administration"],
@@ -1110,6 +1265,7 @@ def chapter_three(document: Document) -> None:
         ["Repository", "Git and private GitHub", "Reviewed changes, protected checks, version history, and release evidence"],
     ]
     add_table(document, "3.8", "Tools and technologies used in the project", ["Area", "Tool or technology", "Purpose"], tools, widths=[1.05, 2.15, 3.0], font_size=8)
+    add_heading(document, "3.8 Project Plan", 2)
     add_figure(document, "3.7", "Incremental implementation and verification workflow", DIAGRAM_DIR / "01_incremental_methodology.png")
     plan = [
         ["Planning and audit", "Requirements, scope, risks, documents and repository controls", "Requirement traceability and approved implementation boundary"],
@@ -1121,10 +1277,11 @@ def chapter_three(document: Document) -> None:
         ["Delivery", "Screenshots, report, staging instructions, release and launch gate review", "Submission package and production candidate"],
     ]
     add_table(document, "3.9", "Project activity plan", ["Work package", "Main work", "Output"], plan, widths=[1.45, 2.65, 2.1], font_size=8)
-    add_heading(document, "3.8 Task Allocation", 2)
+    add_heading(document, "3.9 Task Allocation", 2, page_break_before=True)
+    add_task_allocation_timeline(document, "3.10")
     add_table(
         document,
-        "3.10",
+        "3.11",
         "Task allocation between project members",
         ["Project member", "Principal responsibility", "Shared responsibility"],
         [
@@ -1139,7 +1296,7 @@ def chapter_three(document: Document) -> None:
         f"{STUDENTS[0][0]} concentrated on requirement consolidation, backend domain design, database integrity, deployment evidence, and report traceability. {STUDENTS[1][0]} concentrated on interface implementation, role journeys, synthetic data, browser verification, and evidence capture. Both members reviewed security boundaries, executed manual role walkthroughs, corrected integration defects, and prepared the final presentation. Git history and automated checks remain the technical evidence; this allocation describes responsibility rather than claiming that either member worked in isolation.",
     )
 
-    add_heading(document, "3.9 Summary", 2)
+    add_heading(document, "3.10 Summary", 2)
     add_text(
         document,
         "The design treats authorization, state, concurrency, privacy, and recovery as core functions. The selected architecture remains small enough for the stated pilot but includes the controls needed to test it seriously. Chapter 4 shows how these decisions were implemented and verified.",
@@ -1166,7 +1323,7 @@ def chapter_four(document: Document) -> None:
         "Implementation and Results",
         "This chapter describes the implemented environment and modules, shows the working interfaces, and reports the verified software quality evidence with clear limits on what local testing can prove.",
     )
-    add_heading(document, "4.1 Implementation Environment", 2)
+    add_heading(document, "4.1 Environment Setup", 2)
     environment = [
         ["Frontend", "React 19.2.8, React Router 7.18.2, Vite 8.2.1, Tailwind CSS 4.3.3, JavaScript"],
         ["Backend", "Python 3.14.7, Django 5.2 LTS, Django REST Framework, Gunicorn"],
@@ -1221,7 +1378,7 @@ def chapter_four(document: Document) -> None:
     )
     add_interface_evidence(document)
 
-    add_heading(document, "4.6 Software Quality Assurance Results", 2)
+    add_heading(document, "4.6 Testing and Evaluation", 2)
     add_text(
         document,
         "The final working tree was checked at multiple layers. Backend tests ran against PostgreSQL rather than an easier substitute. Frontend tests covered API contracts, authentication context, queue polling, shared components, formatting and the assistant. Browser tests exercised the assembled same origin system. Failure cases were asserted deliberately, so warning and error log entries produced by a test do not indicate a failed suite when the expected response and rollback are verified.",
@@ -1256,7 +1413,7 @@ def chapter_four(document: Document) -> None:
     ]
     add_table(document, "4.3", "Representative critical test cases", ["ID", "Scenario", "Pass condition"], scenarios, widths=[0.5, 2.25, 3.45], font_size=8)
 
-    add_heading(document, "4.8 Performance and Capacity Results", 2)
+    add_heading(document, "4.8 Performance Evaluation", 2)
     add_text(
         document,
         "The recorded quick local load test ramped to 50 virtual users, held for 60 seconds, and sent 3,638 checked requests through the assembled reverse proxy to public read paths. Its 4.23 millisecond p95 was well below the 500 millisecond quick gate. This proves that the tested local read path remained responsive under that narrow run. It does not prove production network latency, authenticated write capacity, long duration database behaviour, queue freshness under mixed work, or SMTP recovery.",
@@ -1276,7 +1433,7 @@ def chapter_four(document: Document) -> None:
         "The recovery exercise used an isolated project and synthetic marker. It created an encrypted full backup, verified the backup repository, removed only the named recovery database volume, restored into a clean volume, and reconciled the expected record. This verifies the local container and encryption procedure. It does not prove off site credentials, the one hour recovery point objective, or the four hour recovery time objective on the hospital's future infrastructure.",
     )
 
-    add_heading(document, "4.10 Hospital Operations System Results", 2)
+    add_heading(document, "4.10 Results and Discussion", 2)
     add_text(
         document,
         "The implementation satisfies the defined academic and local software goals. A patient can complete the discovery and appointment path, reception can bridge scheduled and walk in patients into one queue, a doctor can operate the assigned queue, and an administrator can configure and audit the service. Queue information is more useful than a simple token because it includes a wait range, confidence and freshness. The role aware assistant reduces navigation uncertainty while remaining read only and useful without a paid provider.",
@@ -1303,7 +1460,7 @@ def chapter_four(document: Document) -> None:
     ]
     add_table(document, "4.4", "Overall implementation and result summary", ["Component", "Main outcome", "Result"], overall_results, widths=[1.25, 3.0, 1.95], font_size=8)
 
-    add_heading(document, "4.12 Analytical Comparison with Existing Studies", 2)
+    add_heading(document, "4.12 Comparative Analysis", 2)
     analytical = [
         ["Cayirli and Veral [1]", "Appointment system design and variability", "Shows that scheduling decisions interact with uncertainty", "The project combines capacity protected booking with a separate observed queue rather than assuming the booked time equals actual service order"],
         ["Gupta and Denton [3]", "Access, preferences, capacity, and uncertainty", "Describes practical complexity in appointment scheduling", "The implementation represents schedules, exceptions, capacity, cancellation, and rescheduling as explicit records and transactions"],
@@ -1328,7 +1485,8 @@ def chapter_five(document: Document) -> None:
         "Engineering Standards and Design Challenges",
         "This chapter relates the project to relevant engineering standards, evaluates its social and professional responsibilities, explains management and financial assumptions, and maps the work to complex engineering problem and activity categories.",
     )
-    add_heading(document, "5.1 Engineering Standards and Practices", 2)
+    add_heading(document, "5.1 Compliance with the Standards", 2)
+    add_heading(document, "5.1.1 Software Standards", 3)
     standards = [
         ["WCAG 2.2 AA [19]", "Accessible web content", "Semantic structure, keyboard operation, focus, labels, contrast, reflow, target size, errors and status messages"],
         ["OWASP ASVS 5.0 Level 2 [20]", "Application security verification", "Authentication, session, access control, validation, data protection, API and configuration test catalogue"],
@@ -1341,24 +1499,20 @@ def chapter_five(document: Document) -> None:
     ]
     add_table(document, "5.1", "Standards and guidance mapping", ["Source", "Area", "Project application"], standards, widths=[1.65, 1.45, 3.1], font_size=8)
 
-    add_heading(document, "5.2 Design Challenges and Constraints", 2)
+    add_heading(document, "5.1.2 Hardware Standards", 3)
     add_text(
         document,
-        "The pilot assumes ordinary patient and staff browsers rather than dedicated devices. A receptionist benefits from a desktop display and reliable local network, while patient pages must work on narrow mobile screens. The planned VPS is intentionally modest at 4 vCPU and 8 GiB RAM. That constraint influenced the use of conditional polling and a database outbox instead of permanent socket infrastructure and a separate message broker. PostgreSQL memory, worker concurrency, connection counts, container limits, disk growth, backup age, and certificate expiry require monitoring.",
-    )
-    add_text(
-        document,
-        "The main software challenge was maintaining one valid business result when actions are repeated or occur at the same time. Booking, rescheduling, check in, queue advancement, and payment correction each affect several records. The design uses transactions, row locks, idempotency, constraints, and append only histories because no single control protects every failure mode. The second challenge was giving useful queue information without disclosing other patients or presenting uncertain timing as a guarantee.",
+        "The pilot assumes standards compliant patient and staff browsers rather than proprietary terminals. Reception work is suited to a desktop or laptop with a reliable local network, while patient pages support ordinary mobile displays. The production baseline is a 4 vCPU, 8 GiB RAM, 160 GiB NVMe server with separate approved backup storage. Capacity, disk growth, memory, database connections, certificate expiry, and backup age must be monitored before the hospital increases its workload.",
     )
 
-    add_heading(document, "5.3 Ethical, Legal, and Social Considerations", 2)
-    add_heading(document, "5.3.1 Communication and Interoperability", 3)
+    add_heading(document, "5.1.3 Communication Standards", 3)
     add_text(
         document,
-        "Browser communication uses HTTPS and JSON over a versioned REST interface. The same origin arrangement makes cookie and CSRF boundaries easier to reason about. Email leaves the system only through an approved SMTP service and contains minimal operational text plus a secure link. No SMS or online payment gateway is connected. The database is not public. Future interoperability may map hospital, patient, practitioner, schedule and appointment identifiers to Bangladesh Core FHIR, but the current resources have not passed FHIR profile validation and must not be advertised as conformant.",
+        "Browser communication uses HTTPS and JSON over a versioned REST interface. The same origin arrangement makes cookie and CSRF boundaries easier to reason about. Email leaves the system only through an approved SMTP service and contains minimal operational text plus a secure link. No SMS or online payment gateway is connected. The database is not public. Future interoperability may map stable identifiers to Bangladesh Core FHIR resources, but the current release has not passed FHIR profile validation and is not presented as conformant.",
     )
 
-    add_heading(document, "5.3.2 Social, Health, Safety, and Cultural Impact", 3)
+    add_heading(document, "5.2 Impact on Society, Environment and Sustainability", 2)
+    add_heading(document, "5.2.1 Impact on Life", 3)
     add_text(
         document,
         "A clearer appointment and queue experience can reduce unnecessary waiting and repeated enquiries. Privacy safe tokens reduce disclosure in a crowded waiting area. Bengali synthetic names and Bangladesh time and currency make the demonstration relevant to the intended environment. However, digital access can exclude people without email, confidence, literacy, vision, motor ability, or reliable connectivity. Reception assisted registration, account claiming, plain language, responsive layout, keyboard support, and a downtime paper reconciliation procedure are therefore part of the design rather than optional decoration.",
@@ -1368,7 +1522,13 @@ def chapter_five(document: Document) -> None:
         "Safety is protected by the nonclinical boundary. A queue estimate may help a patient plan arrival, but it must never tell a person whether symptoms are urgent. The assistant refuses medical advice and directs emergencies to the hospital's approved emergency channel. Staff retain responsibility for operational overrides, and each override leaves a reason. The system should never be used to deny care merely because a patient is not digitally connected.",
     )
 
-    add_heading(document, "5.3.3 Ethical and Privacy Responsibilities", 3)
+    add_heading(document, "5.2.2 Impact on Society and Environment", 3)
+    add_text(
+        document,
+        "The system supports society by making doctor availability, appointment status, and queue progress easier to understand without requiring patients to disclose their information in a public waiting area. Environmentally, the selected architecture avoids dedicated kiosks, a permanent WebSocket cluster, and an additional cache or message broker at pilot scale. Static assets are built once, unchanged queue snapshots use conditional requests, and bounded polling reduces unnecessary network and compute use. These choices reduce avoidable resource use but do not constitute a formal carbon assessment.",
+    )
+
+    add_heading(document, "5.2.3 Ethical Aspects", 3)
     add_text(
         document,
         "Purpose limitation is the main ethical rule. Data collected to book and operate a visit should not silently become advertising, model training, or unrelated profiling data. The system stores no diagnosis, symptom, prescription, or card data. Consent points to the exact published privacy notice version. Staff access is role limited and reviewable. Demonstrations use synthetic identities. Logs and emails use minimal content. The optional assistant receives only allowlisted facts and cannot write to business records.",
@@ -1378,17 +1538,17 @@ def chapter_five(document: Document) -> None:
         "Transparency also applies to estimation. The patient receives a range and confidence rather than a false promise. Staff can see why an estimate was produced and must explain overrides. The hospital must approve the language used for consent, retention, incident communication, and patient correction. Legal review cannot be replaced by a software statement saying that the service is compliant.",
     )
 
-    add_heading(document, "5.4 Sustainability and Environmental Considerations", 2)
+    add_heading(document, "5.2.4 Sustainability Plan", 3)
     add_text(
         document,
         "The design favours a small operational footprint, supported software, container reuse, conditional responses, bounded polling and one database. Fewer services reduce idle compute, backup complexity and operator training. Sustainable operation also includes routine patching, image rebuilds, storage monitoring, deletion according to an approved retention schedule, and deactivation instead of unnecessary duplication. Accessibility and assisted workflows support social sustainability by keeping the service usable for more patients.",
     )
     add_text(
         document,
-        "Environmental impact was considered through resource proportional architecture. The pilot does not require dedicated patient kiosks, a permanent WebSocket cluster, or an additional cache and message broker. Static assets are built once, unchanged queue snapshots can return through conditional requests, and bounded background polling reduces unnecessary traffic. These measures do not establish a formal carbon assessment, but they reduce avoidable compute and operational complexity for the stated scale.",
+        "Operational sustainability requires a named service owner, routine access review, tested backup restoration, monitored certificate and storage health, funded support, and documented staff training. The controlled department pilot must be evaluated before the hospital expands the service. These responsibilities remain necessary even though the selected software dependencies have low direct licence cost.",
     )
 
-    add_heading(document, "5.5 Project Management and Financial Analysis", 2)
+    add_heading(document, "5.3 Project Management and Financial Analysis", 2)
     add_text(
         document,
         "The emergency delivery window required strict priority. Identity, authorization, booking integrity, queue integrity, recovery and evidence were Priority 0. Visual polish and secondary reports followed only when those controls were stable. The task register used one owner and one verifiable completion condition per item. Defects were classified by consequence; a privacy exposure, privilege error, corrupted booking, unsafe queue or failed recovery path blocked release.",
@@ -1408,8 +1568,8 @@ def chapter_five(document: Document) -> None:
         "No vendor price is presented as a current quotation. The hospital should request local quotations for infrastructure, off host backup, SMTP, monitoring, assessment, and support, then approve a twelve month operating budget. The main financial risk is not framework licence cost; it is underfunding the people and recovery processes that keep patient operations trustworthy.",
     )
 
-    add_heading(document, "5.6 Complex Engineering Problem", 2)
-    add_heading(document, "5.6.1 Complex Problem Solving", 3)
+    add_heading(document, "5.4 Complex Engineering Problem", 2)
+    add_heading(document, "5.4.1 Complex Problem Solving", 3)
     add_text(
         document,
         "The project qualifies as a complex engineering problem because it combines conflicting stakeholder needs, security and privacy consequences, concurrent state changes, uncertain service duration, recovery requirements, accessibility, and a constrained deployment environment. A correct answer could not be obtained by producing forms and database tables alone. The solution required analysis of boundaries, failure modes, competing actions, information disclosure, operational responsibility, and evidence after correction.",
@@ -1425,7 +1585,7 @@ def chapter_five(document: Document) -> None:
     ]
     add_table(document, "5.3", "Mapping with complex engineering problem characteristics", ["Code", "Characteristic", "Project rationale"], ep_rows, widths=[0.6, 1.55, 4.05], font_size=8)
 
-    add_heading(document, "5.6.2 Mapping with Knowledge Profile for EP1", 3)
+    add_heading(document, "5.4.2 Mapping with Knowledge Profile for EP1", 3)
     kp_rows = [
         ["K1", "Natural sciences", "Understanding that clinical service duration varies, without modelling clinical decisions."],
         ["K2", "Mathematics", "Median, median absolute deviation, bounded ranges, percentiles, rate and capacity calculations."],
@@ -1438,7 +1598,7 @@ def chapter_five(document: Document) -> None:
     ]
     add_table(document, "5.4", "Mapping with knowledge profile", ["Code", "Knowledge area", "Application in the project"], kp_rows, widths=[0.6, 1.55, 4.05], font_size=8)
 
-    add_heading(document, "5.6.3 Engineering Activities", 3)
+    add_heading(document, "5.4.3 Engineering Activities", 3)
     ea_rows = [
         ["EA1", "Range of resources", "Source documents, application code, database, containers, cloud repository, standards, research, test tools and operational procedures."],
         ["EA2", "Level of interaction", "Continuous coordination across four user roles, academic supervision, development, operations and approval owners."],
@@ -1448,7 +1608,17 @@ def chapter_five(document: Document) -> None:
     ]
     add_table(document, "5.5", "Mapping with complex engineering activities", ["Code", "Activity", "Project rationale"], ea_rows, widths=[0.6, 1.45, 4.15], font_size=8)
 
-    add_heading(document, "5.7 Risk Analysis", 2)
+    add_heading(document, "5.5 Design Challenges and Constraints", 2)
+    add_text(
+        document,
+        "The limited infrastructure influenced the use of conditional polling and a database outbox instead of permanent socket infrastructure and a separate message broker. The main software challenge was maintaining one valid business result when requests repeat or compete. Booking, rescheduling, check in, queue advancement, and payment correction affect several records, so transactions, row locks, idempotency, constraints, and append only histories work together rather than relying on the visible button state.",
+    )
+    add_text(
+        document,
+        "The second challenge was communicating useful queue progress without disclosing another patient or presenting uncertain timing as a promise. The solution uses public tokens, a bounded waiting range, confidence, freshness, a nonclinical boundary, and recorded staff overrides. The third challenge was providing role aware assistance without broad database access. The assistant therefore uses server prepared allowlisted context, read only handlers, safe refusal rules, and a deterministic local fallback.",
+    )
+
+    add_heading(document, "5.6 Risk Analysis", 2)
     risks = [
         ["Unauthorized access to patient records", "High", "Default deny roles, filtered querysets, object checks, MFA for staff, audit, and permission tests", "Hospital access review and incident response rehearsal"],
         ["Double booking or invalid capacity", "High", "Atomic services, schedule locks, unique constraints, idempotency, and last capacity concurrency test", "Full mixed write workload on production sized staging"],
@@ -1461,7 +1631,7 @@ def chapter_five(document: Document) -> None:
     ]
     add_table(document, "5.6", "Major project risks and mitigation strategies", ["Risk", "Impact", "Implemented mitigation", "Remaining control"], risks, widths=[1.25, 0.65, 2.65, 1.65], font_size=7)
 
-    add_heading(document, "5.8 Summary", 2)
+    add_heading(document, "5.7 Summary", 2)
     add_text(
         document,
         "The project required choices across standards, software, operations, ethics, accessibility, cost and recovery. Its complexity comes from interdependent consequences rather than from an excessive number of technologies. The mappings show how theoretical knowledge and engineering practice meet in the implemented candidate.",
@@ -1472,10 +1642,10 @@ def chapter_six(document: Document) -> None:
     chapter(
         document,
         6,
-        "Conclusion and Future Work",
+        "Conclusion",
         "This chapter summarises the completed work and major findings, traces the achieved objectives, states the limitations, and identifies a controlled path for future development after the hospital reviews the production candidate.",
     )
-    add_heading(document, "6.1 Summary of the Work", 2)
+    add_heading(document, "6.1 Summary", 2)
     add_text(
         document,
         "The project transformed a basic university appointment idea into a complete nonclinical hospital operations candidate. It supports patient registration and account claiming, doctor and location configuration, scheduling and closures, capacity based booking, rescheduling, cancellation, check in, walk ins, queue control, onsite payment status, notifications, consent, audit, and role dashboards. React, Django REST Framework, PostgreSQL, Caddy and Docker are combined through one versioned same origin application.",
@@ -1517,7 +1687,7 @@ def chapter_six(document: Document) -> None:
     ]
     add_table(document, "6.1", "Compact objective traceability summary", ["ID", "Objective area", "Completed evidence", "Status"], objective_results, widths=[0.45, 1.45, 3.55, 0.75], font_size=7)
 
-    add_heading(document, "6.4 Limitations", 2)
+    add_heading(document, "6.4 Limitation", 2)
     limitations = [
         ["Single hospital and outpatient scope", "The system is not an electronic medical record or complete hospital information suite", "Evaluate wider modules only through separately governed projects"],
         ["No representative service history", "Adaptive waiting accuracy and patient benefit are not yet measured", "Collect controlled pilot data and compare interval error and coverage"],
@@ -1554,7 +1724,7 @@ def chapter_six(document: Document) -> None:
 def references(document: Document) -> None:
     page_break(document)
     heading = document.add_heading("References", level=1)
-    heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    heading.alignment = WD_ALIGN_PARAGRAPH.LEFT
     heading.paragraph_format.space_after = Pt(18)
     refs = [
         "[1] T. Cayirli and E. Veral, “Outpatient scheduling in health care: A review of literature,” Production and Operations Management, vol. 12, no. 4, pp. 519–549, 2003, doi: 10.1111/j.1937-5956.2003.tb00218.x.",
