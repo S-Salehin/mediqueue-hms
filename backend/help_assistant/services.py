@@ -409,7 +409,8 @@ def _groq_answer(role, message, history, context):
         method="POST",
     )
     try:
-        with request.urlopen(api_request, timeout=settings.GROQ_TIMEOUT_SECONDS) as response:
+        # The request target is a fixed HTTPS literal above. No user input can select its scheme, host, or path.
+        with request.urlopen(api_request, timeout=settings.GROQ_TIMEOUT_SECONDS) as response:  # nosec B310
             payload = json.loads(response.read(1_000_000))
         answer = payload["choices"][0]["message"]["content"].strip()
         return answer[:4000] if answer else None
