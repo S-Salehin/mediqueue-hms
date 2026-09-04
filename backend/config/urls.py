@@ -8,6 +8,7 @@ urlpatterns = [
     path("api/v1/", include("directory.urls")),
     path("api/v1/", include("operations.urls")),
     path("api/v1/", include("communications.urls")),
+    path("api/v1/", include("help_assistant.urls")),
 ]
 
 if settings.DEBUG:

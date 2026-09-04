@@ -23,6 +23,7 @@ import {
   X,
 } from 'lucide-react'
 import { Brand } from './Brand'
+import { AssistantWidget } from './AssistantWidget'
 import { SkipLink } from './SkipLink'
 import { Button, ErrorNotice, LoadingState } from './ui'
 import { useAuth } from '../context/AuthContext'
@@ -316,6 +317,7 @@ export function AppLayout({ role }) {
           <Outlet />
         </main>
       </div>
+      <AssistantWidget role={canonicalRole} />
     </div>
   )
 }

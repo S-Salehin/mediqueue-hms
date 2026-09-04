@@ -8,7 +8,7 @@ FROM ${NODE_IMAGE} AS dependencies
 
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 
 FROM dependencies AS test
 

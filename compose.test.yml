@@ -21,6 +21,9 @@ x-app-environment: &app-environment
   SMTP_TIMEOUT_SECONDS: ${SMTP_TIMEOUT_SECONDS:-10}
   SESSION_IDLE_TIMEOUT_SECONDS: "1800"
   SESSION_ABSOLUTE_TIMEOUT_SECONDS: "28800"
+  GROQ_API_KEY: ""
+  GROQ_MODEL: llama-3.3-70b-versatile
+  GROQ_TIMEOUT_SECONDS: "2"
 
 x-service-defaults: &service-defaults
   init: true

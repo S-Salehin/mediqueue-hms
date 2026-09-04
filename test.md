@@ -534,18 +534,39 @@ The release owner records the exact Git commit, container digest, database migra
 
 ## 30. Current platform verification
 
-The following checks last ran on 26 August 2026 with Docker Engine 29.7.2 and Docker Compose 5.3.1. They describe the current working candidate. Continuous integration must repeat them against the final commit before they become release evidence.
+The following checks last ran on 4 September 2026 with Docker Engine 29.7.2 and Docker Compose 5.3.1. They describe the current working candidate. Continuous integration must repeat them against the final commit before they become release evidence.
 
 1. Local, test, staging, and production Compose configuration rendered successfully. The development, test, and production Caddy policies passed `caddy validate` with their intended host settings.
 2. The PostgreSQL image built from the official pgBackRest 2.59.0 distribution archive. The archive matched SHA256 `faaf8faa14a6392279654ee216a493fcd07b0c513af4b55fe34faec062cb8875`, and the built image returned `pgBackRest 2.59.0`.
 3. The assembled test topology returned HTTP 200 for liveness, readiness, and the application shell through one same origin Caddy endpoint. The database and API published no host ports. The web service could not resolve the private database service, the database could not resolve the web service, and the API alone joined both required networks.
 4. The API and notification worker ran as uid 10001. Caddy ran as uid 10002. Each used a read only root filesystem, had no effective Linux capabilities, and could write only to its approved temporary or persistent paths. The runtime database role had no database or schema creation permission.
-5. The backend suite passed 113 tests against PostgreSQL 18.6 on Python 3.14.7 with 87 percent measured coverage. It includes direct authorization, state transition, idempotency, append only history, booked schedule integrity, last capacity, first MRN, and simultaneous queue call tests.
-6. The frontend suite passed 55 tests with 86.87 percent statement coverage and 88.88 percent line coverage. Formatting, linting, and the Vite production build passed. The built JavaScript was 432.13 kB and 121.12 kB compressed.
-7. Six serial Chromium workflows passed against the assembled same origin stack. They covered public navigation and privacy, patient availability, receptionist MFA and check in, patient queue privacy and location guidance, doctor MFA with the assigned operational queue, administrator MFA, and every sidebar destination for all four roles. The sweep reported no page exception, browser console error, or response with status 500 or above.
+5. The backend suite passed 125 tests against PostgreSQL 18.6 on Python 3.14.7 with 87 percent measured coverage. It includes direct authorization, state transition, idempotency, append only history, booked schedule integrity, last capacity, first MRN, simultaneous queue call, assistant permissions, live role data, safety refusal, provider privacy, and provider fallback tests.
+6. The frontend suite passed 57 tests with 86.87 percent statement coverage and 88.88 percent line coverage. Formatting, linting, and the Vite production build passed. The built JavaScript was 439.38 kB and 123.22 kB compressed.
+7. Six serial Chromium workflows passed against the assembled same origin stack. They covered public navigation and privacy, patient availability with a live assistant answer, receptionist MFA and check in, patient queue privacy and location guidance, doctor MFA with the assigned operational queue, administrator MFA, and every sidebar destination for all four roles. The sweep reported no page exception, browser console error, or response with status 500 or above.
 8. The quick read gate ramped to 50 virtual users, held at 50 for 60 seconds, completed 3,638 requests with no failed check, and measured read p95 at 4.23 milliseconds on the local Docker host. This is only the narrow gate defined in section 22.1. It does not prove write latency, queue freshness, or production capacity.
 9. The isolated recovery exercise created an encrypted full backup, verified the repository, cleared only its named synthetic database volume, restored into that clean volume, and recovered the expected marker. It also proved uid 70, zero effective capabilities, a read only root filesystem, and separated database roles. This proves the local container and encryption mechanics. It does not prove the one hour recovery point objective or four hour recovery time objective on approved off host storage.
 10. Caddy, shell scripts, and GitHub Actions configuration passed their validators. Strict Trivy scans found zero high or critical findings in the API, web, and PostgreSQL images. The current tracked repository scan found zero high or critical dependency vulnerabilities, Dockerfile misconfigurations, or secrets. Current local `pip-audit` and `npm audit` checks found no known dependency vulnerability. The latest required GitHub security workflow for the application revision also passed Bandit, Semgrep, dependency, configuration, and secret checks.
 11. One time sensitive test defect was reproduced shortly after midnight in Asia/Dhaka. The application correctly rejected a check in from the previous service date, but the regression fixture had unintentionally crossed that boundary. The test now uses a stable time on the appointment service date. Its targeted rerun and the complete 113 test suite passed.
 
 The remaining platform release gates require the final committed images and external staging infrastructure. They include the 30 minute authenticated mixed read and write workload, synthetic business integrity reconciliation after that workload, external TLS and certificate monitoring, production SMTP failure handling, restoration from separate approved storage, alert delivery, a schema compatible rollback rehearsal with recorded image digests, and hospital acceptance. None of these items is represented as passed by the local evidence above.
+
+## 31. Help assistant verification
+
+The help assistant test set must prove the following behaviour.
+
+1. An unauthenticated request is denied and a staff request without completed MFA is denied.
+2. A message outside the 2 to 600 character boundary, an unknown request field, or more than six prior turns is rejected.
+3. A patient answer reads only the signed in patient’s appointment, queue, and payment records.
+4. Changing text in the question cannot retrieve another patient’s record or another doctor’s private workload.
+5. Doctor pressure uses only the linked doctor profile and only scheduled working days.
+6. Reception and administrator totals contain counts without patient names or identifiers.
+7. Availability uses the live schedule, exceptions, confirmed capacity, and hospital local time.
+8. Clinical or urgent symptom text returns the safety refusal without calling Groq.
+9. A question containing common personal identifiers stays on the local path.
+10. Groq timeout, network failure, invalid JSON, empty content, and unavailable model return a useful local answer.
+11. A safe Groq request contains the role, approved guide, and privacy safe facts, but no patient profile.
+12. The browser panel opens and closes by keyboard, labels the question field, announces new answers, shows data freshness, provides valid authorized links, and reflows at 320 CSS pixels.
+13. Twenty one assistant requests by one identity inside a minute trigger the configured rate limit without affecting other application scopes.
+14. Prompt injection and requests for hidden instructions, credentials, another role’s data, or record changes do not cross the role or read only boundary.
+
+The assistant does not pass real data acceptance merely because these automated tests pass. Hospital workflow UAT and external processor approval remain separate release gates.
